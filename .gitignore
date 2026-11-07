@@ -1,0 +1,32 @@
+# ─── Firmware (ESP-IDF / PlatformIO) ───
+firmware/.pio/
+firmware/build/
+firmware/main/config.h
+firmware/sdkconfig
+firmware/sdkconfig.old
+
+# ─── Backend (.NET) ───
+backend/**/bin/
+backend/**/obj/
+backend/**/appsettings.*.json
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+
+# ─── Native (Olaf DLL) ───
+native/build/
+native/*.dll
+native/*.so
+# Olaf source é clonado localmente, não versionado aqui
+native/olaf/
+
+# ─── Credenciais ───
+*.secret
+.env
+
+# ─── Diversos ───
+*.user
+.vs/
+.idea/
+.DS_Store
+Thumbs.db

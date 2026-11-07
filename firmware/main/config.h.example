@@ -1,0 +1,14 @@
+#pragma once
+//
+// Copie este arquivo para config.h e preencha com seus valores.
+// config.h é gitignored (contém credenciais). Ver architecture.md seção 10.1.
+
+#define WIFI_SSID        "sua-rede"
+#define WIFI_PASSWORD    "sua-senha"
+#define SERVER_URL       "https://xxx.trycloudflare.com/match"
+#define API_KEY          "dev-key-local"
+#define DEVICE_ID        "esp32-01"
+
+#define AUDIO_SAMPLE_RATE  8000
+#define FFT_SIZE           1024
+#define BATCH_WINDOW_MS    3000

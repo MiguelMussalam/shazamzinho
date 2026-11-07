@@ -1,0 +1,14 @@
+# Config padrão ESP-IDF — Shazamzin
+# Valores de partida; ajuste conforme as Fases 4-6.
+
+# Log level default: INFO
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# FreeRTOS tick 1000 Hz (timestamps mais finos na captura)
+CONFIG_FREERTOS_HZ=1000
+
+# Stack do main task com folga pra inicialização de Wi-Fi
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
+
+# Partição single-app grande (sem OTA) — mais espaço pro firmware + Olaf
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y

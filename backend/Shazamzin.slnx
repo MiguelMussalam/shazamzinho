@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Shazamzin.Api/Shazamzin.Api.csproj" />
+    <Project Path="src/Shazamzin.Core/Shazamzin.Core.csproj" />
+    <Project Path="src/Shazamzin.Infrastructure/Shazamzin.Infrastructure.csproj" />
+    <Project Path="src/Shazamzin.Ingestion/Shazamzin.Ingestion.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Shazamzin.Tests/Shazamzin.Tests.csproj" />
+  </Folder>
+</Solution>

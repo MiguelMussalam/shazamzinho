@@ -1,0 +1,19 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "audio_capture.c"
+        "fingerprint.c"
+        "network.c"
+        "protocol.c"
+        "state_machine.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_wifi
+        esp_netif
+        esp_event
+        nvs_flash
+        esp_http_client
+        driver
+        json
+)
