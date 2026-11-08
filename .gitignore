@@ -33,3 +33,10 @@ Thumbs.db
 
 # Fritzing portatil (instalacao local, nao versionar)
 fritzing.*/
+
+# log de build local
+.build.log
+
+# logs do backend (Serilog)
+logs/
+backend/**/logs/

@@ -38,7 +38,21 @@ O decoder deve rejeitar (HTTP 400) quando:
 - `protocol_version != 1`
 - o corpo tem menos de 8 bytes (header incompleto)
 - `body.Length != 8 + 8 * count` (count não bate com o tamanho real)
-- `count == 0` (nada a casar) — ou tratar como no-match, decidir na Fase 1
+
+`count == 0` **não** é erro: o decoder aceita e o servidor responde no-match
+(`hashes_received: 0`). Decisão da Fase 1.
+
+Códigos HTTP do `POST /match` (implementados em `Shazamzin.Api/Program.cs`):
+
+| Código | Quando |
+|---|---|
+| 200 | payload válido (match ou no-match, ver corpo) |
+| 400 | payload malformado (`{"error": "..."}` com o motivo) |
+| 401 | `X-Api-Key` ausente ou inválida |
+| 413 | corpo maior que `8 + 65535*8` bytes (524.288 bytes) |
+| 415 | `Content-Type` diferente de `application/octet-stream` |
+
+Teste manual sem o ESP: `scripts/send-test-payload.ps1`.
 
 ## Headers HTTP
 
