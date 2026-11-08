@@ -85,7 +85,41 @@ hardware (ESP32 + INMP441).
 
 ### Pendente
 
-- [ ] Primeira build do firmware (baixa o toolchain ESP-IDF; ainda não compilou nunca).
-- [ ] Gravar na COM8 e ver o IP no serial (precisa SSID/senha reais em `firmware/main/config.h`).
-- [ ] Instalar cmake, ffmpeg, cloudflared (winget).
-- [ ] Docker Desktop precisa estar aberto antes do `setup-valkey.ps1` (o container não sobrevive a reinício do Docker fechado).
+- [ ] Gravar com SSID/senha **reais** em `firmware/main/config.h` e ver o IP no serial (hoje o `config.h` tem credenciais falsas, só pra validar build/gravação).
+- [ ] Docker Desktop precisa estar aberto antes do `setup-valkey.ps1` (e o container fica parado se o Docker fechou: `docker start shazamzin-valkey`).
+
+---
+
+## 2026-11-08 — Firmware validado em hardware, Fase 1 e Fase 2 do backend
+
+### Firmware (Fase 0, parte de hardware)
+
+- cmake, ffmpeg e cloudflared instalados via winget (precisam de terminal novo pra entrar no PATH).
+- **1ª build real**: o PlatformIO pegou a plataforma `espressif32@8.0.0` = **ESP-IDF 6.1**, onde o componente `json` (cJSON) não existe mais. Corrigido pinando `platform = espressif32@6.11.0` (= **ESP-IDF 5.4.1**, igual ao plano).
+- Build: ~22 s incremental, RAM 10%, Flash 71%. `sdkconfig.defaults` aplicado (partição `singleapp_large`).
+- **Gravado na COM8 e testado em hardware real**: boot OK, 276 KB de heap livre, Wi-Fi STA sobe, retry (10x) e caminho de falha funcionam. Testado com SSID falso (credenciais reais ainda pendentes).
+- Corrigido log enganoso: não imprime mais "Fase 0 OK" quando o Wi-Fi falha.
+
+### Fase 1 — backend fake + protocolo (branch `feature/fase-1-backend-fake`, mergeada)
+
+- Core: `Fingerprint`, `FingerprintPayload`, `Song`, `MatchResult`, `IMatchingService`, `FingerprintCodec` (little-endian, validação de versão/tamanho/count).
+- Api: `POST /match` (octet-stream → JSON snake_case), `ApiKeyAuthMiddleware` (tempo constante), Serilog (console + arquivo, `RequestId`/`DeviceId`), OpenAPI 3.1 em `/openapi/v1.json` (só Development). Códigos 200/400/401/413/415.
+- Decisão: `count == 0` é aceito e vira no-match (registrado em `protocol.md`).
+- `scripts/send-test-payload.ps1` para teste manual sem o ESP.
+
+### Fase 2 — matching real (branch `feature/fase-2-matching-real`)
+
+- `MatchScorer` (Core, função pura): histograma de deltas com bucket de 50 ms, desempate determinístico (mais votos → menor song_id → menor bucket). `confidence = score / hashes_hit` (limitado a 1); `matched_offset_sec` = média dos deltas no pico.
+- `PostingsCodec` (blob de 8 bytes/posting, `fp:{hash:x8}`), `ValkeyMatchingService` (um MGET em lote), `SqliteSongRepository` (Dapper), `SqliteInitializer` (cria o banco e aplica o `schema.sql` embutido; resolve o caminho relativo a partir do `.slnx`, então o banco é sempre `backend/data/shazamzin.db`).
+- `/health` real: PING no Valkey + COUNT no SQLite; 200 se tudo up, **503 `degraded`** se algo caiu (e diz qual).
+- `Matching:Provider` = `Valkey` (padrão) ou `Fake` (Fase 1) em `appsettings.json`; a API sobe mesmo com o Valkey fora do ar (`abortConnect=false`).
+- **52 testes, 0 pulados**: scorer, codec, SQLite, serviço contra Valkey real (database 15, esvaziado por teste), API ponta a ponta e `/health` com Valkey fora do ar. O `[ValkeyFact]` pula sozinho se o Valkey não estiver de pé.
+- `scripts/seed-fake-data.ps1`: 3 músicas fake (4.500 chaves) + payloads de consulta com 20% de ruído. Validado: as 3 identificadas corretamente; consulta só de ruído = no-match.
+- **Benchmark** (`scripts/benchmark-match.ps1`, 30 req/tamanho): 100 hashes ≈ 2 ms (rtt p50), 1.000 ≈ 3 ms, 10.000 ≈ 48 ms. Um ESP manda ~100–200 hashes → matching bem abaixo dos 15–30 ms do plano. Ressalva: catálogo de teste tem só 4.500 chaves; a escala final (milhões) muda a RAM, não o custo por chave.
+- Bugs achados e corrigidos no caminho: `$PSScriptRoot` não vale dentro dos defaults do `param()` no PowerShell 5.1 (afetava também o `apply-sqlite-schema.ps1` da Fase 0); literal `0xA3F29B01` vira Int32 negativo em PowerShell (usar sufixo `L`); `is_healthy` vazando no JSON do `/health`.
+
+### Próximos passos
+
+1. Credenciais reais de Wi-Fi → ver o IP no serial (fecha a Fase 0 de vez).
+2. **Fase 3**: compilar o Olaf (cmake já instalado), P/Invoke, ingestão real (ffmpeg já instalado).
+3. Fase 4: com o ESP real e sem o mic, alimentar um WAV bruto no pipeline.

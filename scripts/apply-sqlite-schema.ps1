@@ -12,11 +12,15 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$DbPath = "$PSScriptRoot/../backend/data/shazamzin.db",
-    [string]$SchemaPath = "$PSScriptRoot/../backend/src/Shazamzin.Infrastructure/Sqlite/schema.sql"
+    [string]$DbPath,
+    [string]$SchemaPath
 )
 
 $ErrorActionPreference = 'Stop'
+# $PSScriptRoot nao vale dentro dos defaults do param() no PowerShell 5.1: calcula aqui.
+$root = Split-Path -Parent $PSScriptRoot
+if (-not $DbPath) { $DbPath = Join-Path $root 'backend/data/shazamzin.db' }
+if (-not $SchemaPath) { $SchemaPath = Join-Path $root 'backend/src/Shazamzin.Infrastructure/Sqlite/schema.sql' }
 
 if (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) {
     throw "sqlite3 não encontrado no PATH. Instale o sqlite3 CLI ou use o pacote Microsoft.Data.Sqlite."

@@ -10,13 +10,14 @@ using Xunit;
 
 namespace Shazamzin.Tests;
 
-public class MatchEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+/// <summary>Contrato HTTP do /match com o matching fake (Fase 1): não depende de Valkey nem de SQLite.</summary>
+public class MatchEndpointTests : IClassFixture<FakeApiFactory>
 {
     private const string ApiKey = "dev-key-local"; // appsettings.json -> Auth:ApiKey
 
     private readonly HttpClient _client;
 
-    public MatchEndpointTests(WebApplicationFactory<Program> factory) => _client = factory.CreateClient();
+    public MatchEndpointTests(FakeApiFactory factory) => _client = factory.CreateClient();
 
     private static byte[] Payload(int hashes) => FingerprintCodec.Encode(new FingerprintPayload(
         7, Enumerable.Range(0, hashes).Select(i => new Fingerprint((uint)(1000 + i), (uint)(i * 23))).ToArray()));
@@ -38,6 +39,7 @@ public class MatchEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
         json.GetProperty("status").GetString().Should().Be("ok");
+        json.GetProperty("valkey").GetString().Should().Be("disabled");
     }
 
     [Theory]

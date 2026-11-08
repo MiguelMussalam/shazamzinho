@@ -49,6 +49,10 @@ Em lote via `IBatch` do StackExchange.Redis (Fase 3).
 3. Scoring por histograma de deltas `(offset_db - timestamp_query)`, bucket de 50 ms
 4. `song_id` com maior pico acima de `MinScoreThreshold` vence (Fase 2)
 
+Implementação: `ValkeyMatchingService` (MGET), `PostingsCodec` (blob/chave) e `MatchScorer`
+(histograma, em `Shazamzin.Core`, função pura). `confidence = score / hashes_hit` (máx. 1);
+`matched_offset_sec` = média dos deltas no bucket vencedor (posição da música onde a captura começou).
+
 ## Dimensionamento
 
 ~1.500 tuplas/música. 5k músicas ≈ 7,5M postings ≈ ~800 MB RAM.

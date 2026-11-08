@@ -1,8 +1,8 @@
 // Shazamzin.Api — ASP.NET Core 10 Minimal API
 //
-// Fase 1: POST /match recebe o payload binário do ESP (docs/protocol.md), decodifica,
-// chama IMatchingService (ainda fake) e devolve JSON em snake_case. API key obrigatória
-// em /match; /health aberto. Matching real contra Valkey/SQLite entra na Fase 2.
+// POST /match recebe o payload binário do ESP (docs/protocol.md), decodifica, chama
+// IMatchingService e devolve JSON em snake_case. API key obrigatória em /match; /health aberto.
+// Fase 2: o matching real (Valkey + SQLite) é o padrão; Matching:Provider=Fake mantém o da Fase 1.
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -12,7 +12,12 @@ using Shazamzin.Api.Middleware;
 using Shazamzin.Core.Codec;
 using Shazamzin.Core.Interfaces;
 using Shazamzin.Core.Models;
+using Shazamzin.Core.Matching;
+using Shazamzin.Infrastructure;
 using Shazamzin.Infrastructure.Matching;
+using Shazamzin.Infrastructure.Sqlite;
+using Shazamzin.Infrastructure.Valkey;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,7 +35,36 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
 builder.Services.AddOpenApi();
-builder.Services.AddSingleton<IMatchingService, FakeMatchingService>(); // Fase 2: ValkeyMatchingService
+
+// Matching:Provider = "Valkey" (padrão, matching real) ou "Fake" (sem infraestrutura: testes e demos do contrato).
+var matchingOptions = builder.Configuration.GetSection(MatchingOptions.SectionName).Get<MatchingOptions>() ?? new MatchingOptions();
+var provider = builder.Configuration[$"{MatchingOptions.SectionName}:Provider"] ?? "Valkey";
+
+if (provider.Equals("Fake", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IMatchingService, FakeMatchingService>();
+    builder.Services.AddSingleton<IHealthProbe, DisabledHealthProbe>();
+}
+else
+{
+    var sqliteConnectionString = SqliteInitializer.ResolveConnectionString(
+        builder.Configuration["Sqlite:ConnectionString"] ?? "Data Source=./data/shazamzin.db",
+        AppContext.BaseDirectory);
+    SqliteInitializer.EnsureCreated(sqliteConnectionString);
+
+    // abortConnect=false: a API sobe mesmo com o Valkey fora do ar e reconecta sozinha; /health mostra "degraded".
+    var valkeyOptions = ConfigurationOptions.Parse(builder.Configuration["Valkey:ConnectionString"] ?? "localhost:6379");
+    valkeyOptions.AbortOnConnectFail = false;
+    valkeyOptions.ConnectTimeout = 3000;
+    valkeyOptions.SyncTimeout = 2000;
+    valkeyOptions.AsyncTimeout = 2000;
+
+    builder.Services.AddSingleton(matchingOptions);
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(valkeyOptions));
+    builder.Services.AddSingleton<ISongRepository>(_ => new SqliteSongRepository(sqliteConnectionString));
+    builder.Services.AddSingleton<IMatchingService, ValkeyMatchingService>();
+    builder.Services.AddSingleton<IHealthProbe, ValkeyHealthProbe>();
+}
 
 var app = builder.Build();
 
@@ -50,15 +84,12 @@ app.Use(async (context, next) =>
 app.UseSerilogRequestLogging();
 app.UseMiddleware<ApiKeyAuthMiddleware>();
 
-// Health check — nas Fases 2+ passa a checar Valkey e SQLite de verdade
-// e a reportar indexed_songs (ver seção 5.2 do architecture.md).
-app.MapGet("/health", () => Results.Ok(new
+// Health check: PING no Valkey + COUNT no SQLite. 200 se tudo up, 503 se alguma dependência caiu.
+app.MapGet("/health", async (IHealthProbe probe, CancellationToken ct) =>
 {
-    status = "ok",
-    valkey = "unknown",   // Fase 2: PING no Valkey
-    sqlite = "unknown",   // Fase 2: SELECT no SQLite
-    indexed_songs = 0
-})).WithName("Health");
+    var report = await probe.CheckAsync(ct);
+    return Results.Json(report, statusCode: report.IsHealthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).WithName("Health");
 
 app.MapPost("/match", async (HttpContext context, IMatchingService matching, ILogger<Program> logger, CancellationToken ct) =>
 {
