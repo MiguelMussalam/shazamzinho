@@ -40,3 +40,5 @@ fritzing.*/
 # logs do backend (Serilog)
 logs/
 backend/**/logs/
+firmware/sdkconfig.*
+!firmware/sdkconfig.defaults

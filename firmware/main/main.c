@@ -7,6 +7,7 @@
 //
 // Antes de compilar: copie config.h.example -> config.h e preencha as credenciais.
 
+#include <stdbool.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -50,7 +51,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-static void wifi_init_sta(void)
+// Retorna true se conectou e obteve IP; false se esgotou as tentativas.
+static bool wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
 
@@ -85,9 +87,10 @@ static void wifi_init_sta(void)
 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "Wi-Fi conectado.");
-    } else {
-        ESP_LOGE(TAG, "Falha ao conectar no Wi-Fi apos %d tentativas.", WIFI_MAX_RETRY);
+        return true;
     }
+    ESP_LOGE(TAG, "Falha ao conectar no Wi-Fi apos %d tentativas (confira SSID/senha em config.h).", WIFI_MAX_RETRY);
+    return false;
 }
 
 void app_main(void)
@@ -104,7 +107,10 @@ void app_main(void)
     ESP_LOGI(TAG, "Device ID: %s | heap livre: %lu bytes",
              DEVICE_ID, (unsigned long) esp_get_free_heap_size());
 
-    wifi_init_sta();
+    if (!wifi_init_sta()) {
+        ESP_LOGE(TAG, "Fase 0 FALHOU: sem Wi-Fi.");
+        return;
+    }
 
     // Fases 4-5: inicializar I2S, criar as tasks e a máquina de estados.
     // state_machine_start();  // <- TODO Fase 5
