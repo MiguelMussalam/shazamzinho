@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\Shazamzin.Core\Shazamzin.Core.csproj" />
@@ -15,5 +15,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- schema.sql embutido no assembly: SqliteInitializer cria o banco sem depender de arquivo solto -->
+    <EmbeddedResource Include="Sqlite\schema.sql" LogicalName="schema.sql" />
+  </ItemGroup>
 
 </Project>

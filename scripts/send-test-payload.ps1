@@ -20,24 +20,30 @@ param(
     [string]$ApiKey = "dev-key-local",
     [string]$DeviceId = "esp32-ps",
     [ValidateRange(0, 65535)][int]$Count = 180,
-    [uint32]$SessionId = 1
+    [uint32]$SessionId = 1,
+    [string]$File   # envia um payload binário pronto (ex.: os de seed-fake-data.ps1) em vez de gerar um
 )
 
 $ErrorActionPreference = 'Stop'
 
-$ms = New-Object System.IO.MemoryStream
-$bw = New-Object System.IO.BinaryWriter($ms)   # BinaryWriter escreve little-endian
-$bw.Write([byte]1)             # protocol_version
-$bw.Write([byte]0)             # reserved
-$bw.Write([uint16]$Count)      # count
-$bw.Write([uint32]$SessionId)  # session_id
-for ($i = 0; $i -lt $Count; $i++) {
-    $bw.Write([uint32](0xA3F29B01L + $i)) # hash (sufixo L: sem ele o literal vira Int32 negativo)
-    $bw.Write([uint32]($i * 23))          # timestamp_ms
+if ($File) {
+    $bytes = [System.IO.File]::ReadAllBytes($File)
+    Write-Host "Payload: $($bytes.Length) bytes (de $File) -> $Url"
+} else {
+    $ms = New-Object System.IO.MemoryStream
+    $bw = New-Object System.IO.BinaryWriter($ms)   # BinaryWriter escreve little-endian
+    $bw.Write([byte]1)             # protocol_version
+    $bw.Write([byte]0)             # reserved
+    $bw.Write([uint16]$Count)      # count
+    $bw.Write([uint32]$SessionId)  # session_id
+    for ($i = 0; $i -lt $Count; $i++) {
+        $bw.Write([uint32](0xA3F29B01L + $i)) # hash (sufixo L: sem ele o literal vira Int32 negativo)
+        $bw.Write([uint32]($i * 23))          # timestamp_ms
+    }
+    $bw.Flush()
+    $bytes = $ms.ToArray()
+    Write-Host "Payload: $($bytes.Length) bytes ($Count fingerprints) -> $Url"
 }
-$bw.Flush()
-$bytes = $ms.ToArray()
-Write-Host "Payload: $($bytes.Length) bytes ($Count fingerprints) -> $Url"
 
 try {
     $response = Invoke-WebRequest -Uri $Url -Method Post -Body $bytes `
