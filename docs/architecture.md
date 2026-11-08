@@ -101,10 +101,10 @@ Sistema de reconhecimento de música no estilo Shazam, com extração de fingerp
 Core 0 (sistema)              Core 1 (aplicação)
 ├── Wi-Fi stack               ├── AudioCaptureTask    (prio alta)
 ├── TCP/IP                    ├── FingerprintTask     (prio média)
-└── NetworkTask               └── UITask (serial)     (prio baixa)
+└── NetworkTask               └── UITask (OLED + serial)  (prio baixa)
 ```
 
-**Fluxo:** I2S DMA → AudioCaptureTask → fila_samples → FingerprintTask → fila_fingerprints → NetworkTask → HTTP POST → UITask imprime resultado no Serial.
+**Fluxo:** I2S DMA → AudioCaptureTask → fila_samples → FingerprintTask → fila_fingerprints → NetworkTask → HTTP POST → UITask mostra título + artista no OLED e imprime no Serial.
 
 **Máquina de estados:** `IDLE → CAPTURING → PROCESSING → QUERYING → RESULT → IDLE`
 
@@ -131,10 +131,10 @@ Shazamzin.sln
 - **Microfone INMP441** em breakout board I2S (~R$30)
 - **Protoboard 400 pontos + jumpers macho-fêmea** (~R$30)
 - **Cabo USB** de qualidade
+- **Display OLED SSD1306 0.96" 128x64 I2C** — mostra título e artista da música reconhecida (decisão de 2026-11-07: promovido de nice-to-have para essencial; um display de 7 segmentos não escreve texto, por isso o OLED)
 
 ### 4.2 Nice-to-have (depois do MVP funcionar)
 
-- OLED SSD1306 I2C 128x64 para feedback visual
 - LED RGB para status
 - Botão push para trigger manual (o botão BOOT da placa já serve pra prototipagem)
 - Case 3D impresso se for levar portátil
@@ -151,6 +151,21 @@ Shazamzin.sln
 | SD (DATA) | GPIO 32 | Data out |
 
 Evitar pinos strapping (0, 2, 12, 15) para outras funções durante o boot. GPIO 15 é strapping mas tem pull-up por padrão no INMP441, então tolera.
+
+### 4.4 Pinagem OLED SSD1306 (I²C) ↔ ESP32
+
+| OLED | ESP32 | Função |
+|---|---|---|
+| VCC | 3.3V | Alimentação |
+| GND | GND | Terra |
+| SDA | GPIO 21 | Dados I²C |
+| SCL | GPIO 22 | Clock I²C |
+
+Endereço I²C típico: `0x3C`. Alimentação (3.3V/GND) de OLED e INMP441 sai dos trilhos da protoboard.
+
+### 4.5 Diagramas de montagem
+
+- Planta Fritzing pronta (ESP32 + INMP441 + OLED + protoboard): [`docs/fritzing/Shazamzin.fzz`](fritzing/Shazamzin.fzz) — instruções de importação das peças em [`docs/fritzing/README.md`](fritzing/README.md).
 
 ---
 

@@ -64,3 +64,28 @@ hardware (ESP32 + INMP441).
 ### Bugs conhecidos
 
 - Nenhum.
+
+---
+
+## 2026-11-07/08 — Hardware, diagrama e retomada do firmware
+
+### Feito
+
+- **PlatformIO Core 6.2.0** instalado (venv em `C:\Users\migue\.platformio\penv`; `pio` não está no PATH, usar caminho completo).
+- **ESP32 detectado em COM8** (USB-Enhanced-SERIAL CH9102).
+- **Decisão de hardware:** OLED SSD1306 I²C (SDA=GPIO21, SCL=GPIO22) promovido a peça essencial — display de 7 segmentos não escreve título/artista. `architecture.md` atualizado (§3.3, §4.1, §4.4, §4.5).
+- **Planta Fritzing** pronta em `docs/fritzing/Shazamzin.fzz` (peças reais da comunidade, 12 ligações). Validada pelo usuário no Fritzing 0.9.3b; precisou importar os 3 `.fzpz` antes. Re-salva pelo Fritzing com as 3 views.
+- Diagrama web de ligação publicado como Artifact (versão pictórica com protoboard).
+- `platformio.ini`: adicionado `src_dir = main` (o código fica em `main/`, não `src/`).
+- `.gitignore`: ignora o Fritzing portátil (`fritzing.*/`, 364 MB, estava dentro do repo — mover pra fora).
+
+### Combinado
+
+- Sem o microfone físico ainda: na Fase 4 a gente alimenta um WAV bruto no pipeline de fingerprint/rede do ESP real (equivale ao "teste de consistência" do plano).
+
+### Pendente
+
+- [ ] Primeira build do firmware (baixa o toolchain ESP-IDF; ainda não compilou nunca).
+- [ ] Gravar na COM8 e ver o IP no serial (precisa SSID/senha reais em `firmware/main/config.h`).
+- [ ] Instalar cmake, ffmpeg, cloudflared (winget).
+- [ ] Docker Desktop precisa estar aberto antes do `setup-valkey.ps1` (o container não sobrevive a reinício do Docker fechado).
