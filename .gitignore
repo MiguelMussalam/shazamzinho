@@ -30,3 +30,6 @@ native/olaf/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Fritzing portatil (instalacao local, nao versionar)
+fritzing.*/
