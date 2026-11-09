@@ -6,9 +6,11 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Context;
 using Shazamzin.Api.Middleware;
+using Shazamzin.Api.OpenApi;
 using Shazamzin.Core.Codec;
 using Shazamzin.Core.Interfaces;
 using Shazamzin.Core.Models;
@@ -34,7 +36,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<ApiDocumentTransformer>());
 
 // Matching:Provider = "Valkey" (padrão, matching real) ou "Fake" (sem infraestrutura: testes e demos do contrato).
 var matchingOptions = builder.Configuration.GetSection(MatchingOptions.SectionName).Get<MatchingOptions>() ?? new MatchingOptions();
@@ -69,7 +71,14 @@ else
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
+{
     app.MapOpenApi(); // /openapi/v1.json
+    app.MapScalarApiReference("/docs", options => options
+        .WithTitle("Shazamzin API")
+        .AddPreferredSecuritySchemes("ApiKey")
+        .DisableAgent()
+        .DisableDefaultFonts());
+}
 
 // Enriquece todos os logs da requisição com RequestId e DeviceId.
 app.Use(async (context, next) =>
@@ -89,7 +98,13 @@ app.MapGet("/health", async (IHealthProbe probe, CancellationToken ct) =>
 {
     var report = await probe.CheckAsync(ct);
     return Results.Json(report, statusCode: report.IsHealthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-}).WithName("Health");
+})
+.WithName("Health")
+.WithSummary("Verifica a saúde da API e do catálogo")
+.WithDescription("Endpoint público. Verifica Valkey e SQLite e informa o total de músicas indexadas. " +
+    "Retorna 503 quando alguma dependência está indisponível. No provider Fake, as dependências aparecem como disabled.")
+.Produces<HealthReport>(StatusCodes.Status200OK)
+.Produces<HealthReport>(StatusCodes.Status503ServiceUnavailable);
 
 app.MapPost("/match", async (HttpContext context, IMatchingService matching, ILogger<Program> logger, CancellationToken ct) =>
 {
@@ -129,6 +144,29 @@ app.MapPost("/match", async (HttpContext context, IMatchingService matching, ILo
     return Results.Ok(result);
 })
 .WithName("Match")
+.WithSummary("Identifica uma música pelos fingerprints acústicos")
+.WithDescription("""
+    Envie um arquivo `.bin` como corpo **application/octet-stream**, com bytes brutos (sem JSON ou base64).
+    Informe a chave configurada em `Auth:ApiKey` no campo de autenticação **ApiKey** (`X-Api-Key`).
+    O header opcional `X-Device-ID` identifica o dispositivo nos logs.
+
+    Todos os inteiros usam **little-endian**. O payload tem `8 + 8 × count` bytes (máximo: 524.288 bytes):
+
+    | Offset | Tipo | Campo |
+    | --- | --- | --- |
+    | 0 | uint8 | protocol_version = 1 |
+    | 1 | uint8 | reserved = 0 |
+    | 2 | uint16 | count (0 a 65535) |
+    | 4 | uint32 | session_id |
+    | 8 + 8 × i | uint32 | hash do fingerprint i |
+    | 12 + 8 × i | uint32 | timestamp_ms do fingerprint i |
+
+    `count = 0` é válido e resulta em `match: false`. Uma resposta 200 pode representar match ou no-match;
+    consulte o campo `match`. Campos nulos são omitidos da resposta JSON.
+
+    Para um teste sem fingerprints, crie um arquivo com os bytes hexadecimais `01 00 00 00 01 00 00 00`.
+    Consulte `docs/protocol.md` e `scripts/send-test-payload.ps1` no repositório para outros exemplos.
+    """)
 .Accepts<byte[]>("application/octet-stream")
 .Produces<MatchResult>(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status400BadRequest)

@@ -4,6 +4,12 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+-- Vincula este catálogo ao índice Valkey e ao perfil exato de fingerprinting.
+CREATE TABLE IF NOT EXISTS catalog_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS songs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
@@ -28,6 +34,7 @@ CREATE TABLE IF NOT EXISTS ingestion_log (
   error_message TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ingestion_log_status ON ingestion_log(status);
+CREATE INDEX IF NOT EXISTS idx_ingestion_log_song_status ON ingestion_log(song_id, status);
 
 CREATE TABLE IF NOT EXISTS match_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

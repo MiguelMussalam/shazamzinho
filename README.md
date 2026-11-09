@@ -18,18 +18,22 @@ HTTP para um **backend .NET 10** que faz o matching contra um índice invertido 
 | Ingestão offline | Console .NET 10 + Olaf via P/Invoke | [`backend/src/Shazamzin.Ingestion/`](backend/src/Shazamzin.Ingestion/) |
 | Lib nativa Olaf | C compilado como DLL | [`native/`](native/) |
 
-## Estado atual — Fase 0 (setup)
+## Estado atual — backend real e primeiro marco da Fase 3
 
-Concluído e verificado nesta máquina:
+Implementado e validado:
 
 - ✅ Monorepo + git inicializado
 - ✅ Solution C# (`Shazamzin.slnx`) com 4 projetos + testes, `global.json` pinado em .NET 10
-- ✅ `GET /health` → `200 {"status":"ok",...}`
+- ✅ `GET /health`, `POST /match`, API key e documentação Scalar em `/docs`
+- ✅ Matching real: índice Valkey, scoring por alinhamento temporal e metadados SQLite
+- ✅ Olaf nativo fixado por commit, integrado ao .NET via P/Invoke
+- ✅ CLI `add` para um arquivo e `extract` para consultas binárias de trechos reais
 - ✅ Valkey 8 rodando em Docker (`scripts/setup-valkey.ps1`), `PING` → `PONG`
 - ✅ Schema SQLite aplicado (`scripts/apply-sqlite-schema.ps1`)
 
-Pendente (requer ferramentas/hardware ainda não instalados): toolchain ESP-IDF/PlatformIO,
-compilação standalone do Olaf (cmake), `ffmpeg`, `cloudflared`. Ver [`docs/sprint-log.md`](docs/sprint-log.md).
+Próximos marcos: ingestão de pastas e retomada automática, integração Olaf no ESP32,
+captura pelo INMP441 e resultado no OLED. A validação de áudio real está em
+[`docs/ingestion.md`](docs/ingestion.md); o histórico fica em [`docs/sprint-log.md`](docs/sprint-log.md).
 
 ## Começar
 
@@ -49,9 +53,46 @@ dotnet run --project src/Shazamzin.Api
 curl http://localhost:5184/health
 ```
 
+Em `Development`, a documentação interativa **Scalar** fica em
+[http://localhost:5184/docs](http://localhost:5184/docs), e o documento OpenAPI em
+[http://localhost:5184/openapi/v1.json](http://localhost:5184/openapi/v1.json).
+Os perfis de execução abrem `/docs` ao iniciar pelo IDE. A interface e o documento
+OpenAPI não são expostos em `Production`.
+
+Para testar `POST /match` no Scalar, preencha a autenticação **ApiKey** com o valor
+configurado em `Auth:ApiKey` e selecione um arquivo `.bin` como corpo
+`application/octet-stream` (bytes brutos, sem JSON/base64). `X-Device-ID` é opcional.
+Este exemplo PowerShell cria um payload válido vazio, que retorna `match: false`:
+
+```powershell
+$payloadPath = Join-Path $env:TEMP 'shazamzin-empty.bin'
+[System.IO.File]::WriteAllBytes($payloadPath, [byte[]](1, 0, 0, 0, 1, 0, 0, 0))
+$payloadPath # selecione este arquivo no cliente de testes do Scalar
+```
+
+Com Valkey indisponível, `/health` retorna `503` e as consultas reais não funcionam.
+Para explorar a interface sem infraestrutura, rode o provider de demonstração:
+
+```powershell
+dotnet run --project src/Shazamzin.Api -- --Matching:Provider=Fake
+```
+
+O modo `Fake` usa respostas simuladas. Para o contrato completo do payload, veja
+[`docs/protocol.md`](docs/protocol.md) e [`scripts/send-test-payload.ps1`](scripts/send-test-payload.ps1).
+
+### Ingestão de áudio real
+
+Compile a biblioteca com `./native/build.ps1` e depois rode
+`dotnet build backend/Shazamzin.slnx`. Siga [`docs/ingestion.md`](docs/ingestion.md)
+para criar um catálogo separado, indexar um arquivo e gerar um `.bin` reconhecível
+pela API. O catálogo simulado da Fase 2 é preservado e não é misturado automaticamente
+com os fingerprints reais.
+
 ### Firmware
 
-Requer a toolchain ESP-IDF via PlatformIO (ainda não instalada). Ver
+Consulte a [revisão da montagem no Fritzing](docs/fritzing/README.md) antes de ligar o hardware.
+
+Requer a toolchain ESP-IDF via PlatformIO. Ver
 [`docs/esp-idf-notes.md`](docs/esp-idf-notes.md) e [`firmware/README`](firmware/).
 Copie `firmware/main/config.h.example` para `firmware/main/config.h` e preencha as
 credenciais antes de compilar.

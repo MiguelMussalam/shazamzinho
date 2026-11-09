@@ -13,6 +13,7 @@ using Xunit;
 namespace Shazamzin.Tests;
 
 /// <summary>Ponta a ponta: HTTP → codec → Valkey (database 15) → scorer → SQLite temporário → JSON.</summary>
+[Collection("Valkey database 15")]
 public sealed class RealMatchingApiTests : IClassFixture<RealApiFactory>
 {
     private readonly RealApiFactory _factory;

@@ -1,32 +1,42 @@
-# Compilação da lib Olaf como DLL/shared lib (Fase 3)
-# Gera libolaf.dll expondo olaf_extract_fingerprints(...) para P/Invoke no Ingestion.
-#
-# Pré-requisitos: cmake + um compilador C (MSVC ou MinGW), Olaf clonado em native/olaf/.
-# Ver native/build.ps1 e docs/architecture.md seção 3 (decisão 3) e 8 (Fase 3).
-
-cmake_minimum_required(VERSION 3.16)
-project(olaf_native C)
-
+cmake_minimum_required(VERSION 3.19)
+project(shazamzin_olaf C)
 set(CMAKE_C_STANDARD 11)
-
-# Caminho dos fontes do Olaf (clonados por build.ps1).
+set(CMAKE_C_EXTENSIONS ON)
 set(OLAF_DIR "${CMAKE_CURRENT_SOURCE_DIR}/olaf")
-
-if(NOT EXISTS "${OLAF_DIR}/src")
-    message(FATAL_ERROR
-        "Fontes do Olaf nao encontrados em ${OLAF_DIR}. "
-        "Rode native/build.ps1 (ele clona o Olaf) antes de configurar o CMake.")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/olaf.version" OLAF_REVISION LIMIT_COUNT 1)
+if(NOT EXISTS "${OLAF_DIR}/src/olaf_fft.c")
+    message(FATAL_ERROR "Olaf ausente. Execute native/build.ps1 primeiro.")
+endif()
+execute_process(COMMAND git -C "${OLAF_DIR}" rev-parse HEAD
+    OUTPUT_VARIABLE ACTUAL_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+if(NOT ACTUAL_REVISION STREQUAL OLAF_REVISION)
+    message(FATAL_ERROR "Commit Olaf diferente de olaf.version. Execute native/build.ps1.")
 endif()
 
-# TODO Fase 3: ajustar a lista de fontes conforme a estrutura real do Olaf.
-file(GLOB OLAF_SOURCES "${OLAF_DIR}/src/*.c")
-
-# Wrapper que expõe uma API estável para P/Invoke (a ser escrito na Fase 3):
-#   native/olaf_wrapper.c -> olaf_extract_fingerprints(wav_bytes, len, out_hashes, out_count)
-list(APPEND OLAF_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/olaf_wrapper.c")
-
-add_library(olaf SHARED ${OLAF_SOURCES})
+# Somente extração: não compila os bancos LMDB/memória nem a CLI do upstream.
+add_library(olaf SHARED olaf_wrapper.c
+    "${OLAF_DIR}/src/olaf_config.c"
+    "${OLAF_DIR}/src/olaf_fft.c"
+    "${OLAF_DIR}/src/olaf_ep_extractor.c"
+    "${OLAF_DIR}/src/olaf_fp_extractor.c"
+    "${OLAF_DIR}/src/olaf_max_filter_perceptual_van_herk.c"
+    "${OLAF_DIR}/src/pffft.c")
 target_include_directories(olaf PRIVATE "${OLAF_DIR}/src")
-
-# Nome de saída: libolaf.dll (Windows) / libolaf.so (Linux)
-set_target_properties(olaf PROPERTIES OUTPUT_NAME "olaf")
+target_compile_definitions(olaf PRIVATE PFFFT_SIMD_DISABLE SHAZAMZIN_OLAF_BUILD
+    OLAF_REVISION="${OLAF_REVISION}")
+if(MSVC)
+    target_compile_definitions(olaf PRIVATE _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(olaf PRIVATE -ffp-contract=off)
+    target_link_libraries(olaf PRIVATE m)
+    if(MINGW)
+        target_link_options(olaf PRIVATE -static-libgcc)
+    endif()
+endif()
+set_target_properties(olaf PROPERTIES PREFIX "lib" OUTPUT_NAME olaf)
+add_executable(shazamzin-olaf olaf_cli.c)
+target_link_libraries(shazamzin-olaf PRIVATE olaf)
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+    set_target_properties(olaf shazamzin-olaf PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${config} "${CMAKE_BINARY_DIR}")
+endforeach()

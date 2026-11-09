@@ -19,6 +19,12 @@
   <ItemGroup>
     <!-- schema.sql embutido no assembly: SqliteInitializer cria o banco sem depender de arquivo solto -->
     <EmbeddedResource Include="Sqlite\schema.sql" LogicalName="schema.sql" />
+    <None Include="..\..\..\native\build\libolaf.dll" Link="libolaf.dll"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          Condition="Exists('..\..\..\native\build\libolaf.dll')" />
+    <None Include="..\..\..\native\build\libolaf.so" Link="libolaf.so"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"
+          Condition="Exists('..\..\..\native\build\libolaf.so')" />
   </ItemGroup>
 
 </Project>

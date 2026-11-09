@@ -33,8 +33,9 @@ pio run -t upload -t monitor
 | SCK     | GPIO 14  | Bit Clock    |
 | SD      | GPIO 32  | Data out     |
 
-Evitar pinos de strapping (0, 2, 12, 15) para outras funções no boot. GPIO 15 é
-strapping mas tolera por causa do pull-up do INMP441. Botão BOOT = GPIO 0 (trigger manual).
+O GPIO 15 é um pino de strapping do ESP32 com pull-up interno. O `WS` do INMP441
+é uma entrada. Confira o boot com o módulo conectado. O botão BOOT usa GPIO 0.
+[Datasheet ESP32](https://documentation.espressif.com/esp32_datasheet_en.html)
 
 ## I2S (nova API ESP-IDF 5.x)
 

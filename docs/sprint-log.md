@@ -123,3 +123,27 @@ hardware (ESP32 + INMP441).
 1. Credenciais reais de Wi-Fi → ver o IP no serial (fecha a Fase 0 de vez).
 2. **Fase 3**: compilar o Olaf (cmake já instalado), P/Invoke, ingestão real (ffmpeg já instalado).
 3. Fase 4: com o ESP real e sem o mic, alimentar um WAV bruto no pipeline.
+
+---
+
+## 2026-11-08 — Documentação interativa com Scalar
+
+- Integrado `Scalar.AspNetCore` 2.19.0 em `/docs`, consumindo o OpenAPI nativo em `/openapi/v1.json`. Ambos disponíveis somente em `Development`.
+- Perfis HTTP/HTTPS do IDE configurados para abrir `/docs`.
+- OpenAPI documenta autenticação `X-Api-Key` apenas no `/match`, header opcional `X-Device-ID` e upload de bytes brutos (`application/octet-stream`, formato `binary`). A chave do servidor não é embutida na página.
+- Descrições em português para `/health` (incluindo resposta 503) e `/match`, com tabela do protocolo little-endian. README inclui acesso à interface, criação de um payload vazio válido e execução com provider `Fake`.
+- Assets do Scalar servidos localmente; fontes de CDN e agente de IA desativados.
+- Validação: build e suíte existente com **47 aprovados, 0 falhas, 5 ignorados** por Valkey indisponível. Interface conferida no navegador; HTML, bundle local e OpenAPI retornaram 200. Payload binário vazio autenticado retornou 200/no-match; requisição sem chave retornou 401. Em uma instância temporária `Production`/`Fake`, `/docs`, `/docs/` e `/openapi/v1.json` retornaram 404.
+
+---
+
+## 2026-11-08 — Primeiro reconhecimento com áudio real (Fase 3, marco inicial)
+
+- Olaf fixado no commit `f6f7cbefb50485953f71100c9d08c625f01780ba`; ponte C compilada com CMake, GCC/MinGW x64 e Ninja. PFFFT escalar; DLL depende apenas de bibliotecas do Windows, sem runtime MinGW externo.
+- Perfil explícito `shazamzin-8k-1024-128-2ep-fold32-v1/<commit>`: 8 kHz, FFT 1024, passo 128, dois event points. O primeiro experimento com passo 256 gerava poucos hashes em 3 s; passo 128 preserva os 16 ms do preset ESP32 upstream em 16 kHz. Configuração compartilhável em `native/shazamzin_olaf_config.h`; firmware ainda precisa ser integrado e comparado fisicamente.
+- P/Invoke, PCM float32 via FFmpeg e metadados via FFprobe. A CLI System.CommandLine 2.0.14 implementa `add` de um arquivo e `extract` de um trecho independente para payload binário v1. O build .NET copia a biblioteca para os executáveis.
+- Idempotência SHA256; identidade/perfil vinculam SQLite e Valkey. Catálogo simulado não é misturado automaticamente. ID da música reservado antes dos writes; logs `pending`/`failed` ocultam a música do repositório e da contagem de prontas. Lua por chave permite repetir `add` após falha parcial sem duplicar postings. Escrita local sequencial com lock por SQLite.
+- Duas músicas do dataset usado pelo Olaf indexadas em ambiente isolado (`shazamzin-phase3-test`, localhost:6381, DB 1 e SQLite separado). Na primeira, cinco cortes independentes de 3 s em 10/25/34/50/75 s reconheceram corretamente música e offset. Uma consulta MP3 do dataset, codificada separadamente, reconheceu a primeira música em 33,9 s (origem 34 s). Uma segunda música retornou no-match antes da indexação e foi reconhecida em 20 s depois de indexada. Repetir `add` retornou `skipped: true`.
+- **61 testes aprovados, 0 falhas, 0 ignorados**: inclui equivalência C/.NET no mesmo PCM, sessões nativas independentes, silêncio/entrada inválida, idempotência, falha parcial e reparo, rejeição de legado sem perfil e ocultação de ingestões incompletas. Após os últimos guards de timestamp/cancelamento e ativação de foreign keys no escritor, os quatro testes de ingestão passaram novamente. Corrigida disputa preexistente entre duas classes que esvaziavam o DB 15 em paralelo, agrupando-as na mesma coleção xUnit.
+- Docker Desktop inicialmente falhou em sockets AF_UNIX antigos (`dockerInference`, depois `engine.sock`). Recuperado encerrando os processos Docker e renomeando somente as pastas de runtime observadas para backups `.stale-*` em LocalAppData. Containers, volumes e configurações não foram apagados. Engine e Valkey voltaram a responder; backups preservados.
+- README, arquitetura, guia `docs/ingestion.md`, instruções nativas e wrapper PowerShell atualizados. Fase 3 completa ainda requer pastas, paralelismo, `resume` automático, `remove`, `stats`, `verify` e validação de um catálogo maior.

@@ -2,8 +2,8 @@
 
 **Documento de arquitetura e referência de implementação**
 **Autor:** Ronaldo
-**Última atualização:** 2026-11-07
-**Status:** Plano inicial — pronto para iniciar Fase 0
+**Última atualização:** 2026-11-08
+**Status:** Backend real (Fase 2) e primeiro marco da Fase 3 implementados; ingestão em lote e firmware de áudio pendentes
 
 ---
 
@@ -150,7 +150,7 @@ Shazamzin.sln
 | SCK (BCLK) | GPIO 14 | Bit Clock |
 | SD (DATA) | GPIO 32 | Data out |
 
-Evitar pinos strapping (0, 2, 12, 15) para outras funções durante o boot. GPIO 15 é strapping mas tem pull-up por padrão no INMP441, então tolera.
+O GPIO 15 é um pino de strapping do ESP32 com pull-up interno. O `WS` do INMP441 é uma entrada. Confira o boot com o módulo conectado. [Datasheet ESP32](https://documentation.espressif.com/esp32_datasheet_en.html)
 
 ### 4.4 Pinagem OLED SSD1306 (I²C) ↔ ESP32
 
@@ -165,7 +165,7 @@ Endereço I²C típico: `0x3C`. Alimentação (3.3V/GND) de OLED e INMP441 sai d
 
 ### 4.5 Diagramas de montagem
 
-- Planta Fritzing pronta (ESP32 + INMP441 + OLED + protoboard): [`docs/fritzing/Shazamzin.fzz`](fritzing/Shazamzin.fzz) — instruções de importação das peças em [`docs/fritzing/README.md`](fritzing/README.md).
+- Rascunho editável no [Fritzing](fritzing/Shazamzin.fzz). Consulte a [revisão das ligações](fritzing/README.md) antes de montar.
 
 ---
 
@@ -434,20 +434,27 @@ Prazo-alvo: **apresentação em ~9-11 semanas**, com folga para imprevistos e pa
 
 **Entregável:** ingestão real e robusta de 5k+ arquivos de áudio.
 
-- [ ] Clonar Olaf, estudar API e código
-- [ ] `native/CMakeLists.txt`: compila Olaf como DLL/shared lib expondo função `olaf_extract_fingerprints(wav_bytes, out_hashes, out_count)`
-- [ ] Script `native/build.ps1` que gera `libolaf.dll` e copia pra bin do Ingestion
-- [ ] `Shazamzin.Infrastructure/Native/OlafNative.cs` com `[DllImport]`
-- [ ] Teste unitário: mesmo áudio processado via P/Invoke e via CLI do Olaf devem produzir fingerprints idênticos
+- [x] Olaf fixado por commit em `native/olaf.version`; perfil explícito 8 kHz / FFT 1024 / passo 128 / 2 event points
+- [x] `native/CMakeLists.txt`: compila `libolaf.dll`; a ponte recebe PCM float32 e entrega fingerprints por callback
+- [x] `native/build.ps1` compila a biblioteca; o build .NET copia para execução/publicação
+- [x] `Shazamzin.Infrastructure/Native/OlafNative.cs` com `[DllImport]`
+- [x] Teste: mesmo PCM via P/Invoke e CLI C da ponte produz fingerprints idênticos (comparação com ESP32 ainda pendente)
 - [ ] `Shazamzin.Ingestion` console app com CLI da seção 6.3 (System.CommandLine)
-- [ ] Decodificação: shell-out para `ffmpeg` convertendo pra WAV mono 8kHz
-- [ ] Extração de metadados com ATL.NET (`z440.atl.core`)
-- [ ] Idempotência via SHA256 do arquivo
+- [x] Primeiro recorte da CLI: `add` de um arquivo e `extract` de trecho independente para payload v1
+- [x] Decodificação: `ffmpeg` para PCM float32 LE mono 8 kHz, sem arquivo WAV intermediário
+- [x] Metadados via `ffprobe`, que já acompanha FFmpeg; substitui ATL.NET nesta entrega
+- [x] Idempotência via SHA256; repetição de `add` repara uma indexação parcial sem duplicar postings
 - [ ] Paralelismo com `Parallel.ForEachAsync` e `Channel<T>` alimentando batch writer
-- [ ] Batch insert no Valkey usando `IBatch` do StackExchange.Redis
+- [x] Writes em grupos de 128 hashes, com Lua por chave substituindo somente postings do song ID em ingestão
 - [ ] Comando `resume` que relê `ingestion_log` buscando pendentes/falhos
 - [ ] Comando `stats`: total de músicas, total de hashes únicos, RAM estimada no Valkey
 - [ ] **Milestone concreto:** ingerir 100 músicas de teste, validar com queries manuais
+
+**Primeiro marco validado:** duas músicas reais indexadas em catálogo isolado;
+cinco consultas de 3 s na primeira música reconheceram os offsets esperados.
+O perfil e a identidade do catálogo são registrados no SQLite e no Valkey.
+Músicas com ingestão `pending`/`failed` ficam indisponíveis até o reparo.
+Instruções e limites em [`ingestion.md`](ingestion.md) e [`../native/README.md`](../native/README.md).
 
 ### Fase 4 — ESP32 áudio + Olaf local (semana 7-8)
 

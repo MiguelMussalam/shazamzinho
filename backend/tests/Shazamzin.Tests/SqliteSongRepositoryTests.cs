@@ -72,6 +72,26 @@ public sealed class SqliteSongRepositoryTests : IDisposable
         (await _repository.CountAsync()).Should().Be(2);
     }
 
+    [Theory]
+    [InlineData("pending")]
+    [InlineData("failed")]
+    public async Task IncompleteIngestion_IsHiddenUntilItFinishes(string status)
+    {
+        Insert("Incompleta", "Artista", null, null, "incomplete");
+        using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO ingestion_log(file_path,song_id,started_at,status) VALUES ('x.mp3',1,datetime('now'),$status)";
+        command.Parameters.AddWithValue("$status", status);
+        command.ExecuteNonQuery();
+        Assert.Null(await _repository.GetByIdAsync(1));
+        Assert.Equal(0, await _repository.CountAsync());
+        command.CommandText = "UPDATE ingestion_log SET status='done' WHERE song_id=1";
+        command.ExecuteNonQuery();
+        Assert.NotNull(await _repository.GetByIdAsync(1));
+        Assert.Equal(1, await _repository.CountAsync());
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools(); // libera o arquivo no Windows antes de apagar

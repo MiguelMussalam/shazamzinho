@@ -37,6 +37,7 @@ public sealed class ValkeyFactAttribute : FactAttribute
 /// Integração com um Valkey real. Usa o database 15 (o catálogo de verdade fica no 0),
 /// que é esvaziado antes de cada teste.
 /// </summary>
+[Collection("Valkey database 15")]
 public sealed class ValkeyMatchingServiceTests : IAsyncLifetime
 {
     internal static readonly ConfigurationOptions Options =

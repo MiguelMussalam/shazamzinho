@@ -26,7 +26,8 @@ public sealed class SqliteSongRepository : ISongRepository
         await using var connection = new SqliteConnection(_connectionString);
         var row = await connection.QuerySingleOrDefaultAsync<SongRow>(new CommandDefinition(
             "SELECT id AS Id, title AS Title, artist AS Artist, album AS Album, duration_sec AS DurationSec " +
-            "FROM songs WHERE id = @id",
+            "FROM songs WHERE id = @id AND NOT EXISTS (" +
+            "SELECT 1 FROM ingestion_log WHERE song_id = songs.id AND status IN ('pending', 'failed'))",
             new { id }, cancellationToken: cancellationToken));
 
         return row is null
@@ -38,6 +39,8 @@ public sealed class SqliteSongRepository : ISongRepository
     {
         await using var connection = new SqliteConnection(_connectionString);
         return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            "SELECT COUNT(*) FROM songs", cancellationToken: cancellationToken));
+            "SELECT COUNT(*) FROM songs WHERE NOT EXISTS (" +
+            "SELECT 1 FROM ingestion_log WHERE song_id = songs.id AND status IN ('pending', 'failed'))",
+            cancellationToken: cancellationToken));
     }
 }
