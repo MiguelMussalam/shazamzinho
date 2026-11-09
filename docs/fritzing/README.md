@@ -1,25 +1,27 @@
 # Planta Fritzing — Shazam-ESP32
 
-`Shazamzin.fzz` é um rascunho editável com **ESP32 DevKit V1 (30 pinos), INMP441,
-OLED SSD1306 e protoboard**.
+`Shazamzin.fzz` contém a montagem em protoboard do **ESP32 DevKit V1 (30 pinos),
+INMP441 e OLED SSD1306**.
 
-**Mantenha a montagem desligada enquanto corrige as ligações abaixo.** A revisão
-da vista de protoboard encontrou conexões involuntárias no arquivo salvo.
+![Montagem corrigida na protoboard](Shazamzin_bb.svg)
 
-- As duas fileiras do INMP441 ocupam as mesmas colunas da metade A–E. A coluna 20
-  une `SCK` a `SD`, a 21 une `WS` a `VDD` e a 22 une `L/R` a `GND`. Coloque o
-  módulo fora da protoboard e ligue cada pino por jumper, ou posicione os pinos
-  em ilhas eletricamente separadas.
-- O fio de `L/R` termina no trilho superior ligado ao `VCC` do OLED. Remova
-  esse fio e ligue `L/R` diretamente a `GND` para selecionar o canal esquerdo.
-  Faça isso antes de alimentar os trilhos.
-- As pontes de alimentação estão na extremidade direita. As interrupções centrais
-  no trilho superior de GND e no trilho inferior de 3,3 V deixam o OLED sem
-  alimentação correta. Alimente `VCC` e `GND` do OLED diretamente pelos pinos do
-  ESP32 ou pelos mesmos segmentos já alimentados. Com o circuito desligado,
-  confira continuidade das ligações e separação entre 3,3 V e GND.
+## Ajustes em relação à montagem anterior
 
-[Datasheet do INMP441](https://product.tdk.com/system/files/dam/doc/product/sw_piezo/mic/mems-mic/data_sheet/inmp441.pdf)
+Com o ESP32 desligado, ajuste o microfone e os jumpers:
+
+1. Passe o INMP441 para o vão central. A fileira `SCK`, `WS`, `L/R` ocupa `E20–E22`
+   e a fileira `SD`, `VDD`, `GND` ocupa `F20–F22`. Cada fileira fica em uma metade
+   eletricamente separada da protoboard.
+2. Ligue `L/R` ao trilho de GND acima do microfone, na posição `W22` do desenho.
+   Isso seleciona o canal esquerdo. [Datasheet do INMP441](https://product.tdk.com/system/files/dam/doc/product/sw_piezo/mic/mems-mic/data_sheet/inmp441.pdf)
+3. Acrescente as pontes que faltavam nas interrupções centrais. No trilho superior
+   de GND, ligue `W29` a `W32`. No trilho inferior de 3,3 V, ligue `Y29` a `Y32`.
+   O desenho já inclui as outras duas pontes centrais e os dois jumpers da
+   extremidade direita que unem os trilhos de cima e de baixo.
+
+Antes de alimentar a montagem física, confira com um multímetro a continuidade
+dos trilhos e a separação entre 3,3 V e GND. Use os nomes impressos nos módulos
+para conferir a orientação dos pinos.
 
 ## Como abrir
 
@@ -33,7 +35,12 @@ são contribuições da comunidade. É um passo único:
    - `parts/INMP441.fzpz`
    - `parts/SSD1306 OLED 0.96in I2C.fzpz`
 3. Abra `Shazamzin.fzz` (File → Open).
-4. Vá na aba **Breadboard View** para conferir a montagem e aplicar os ajustes acima.
+4. Vá na aba **Protoboard** para acompanhar a montagem.
+
+A vista foi aberta no Fritzing 0.9.3b e as sete redes foram conferidas pelo grafo
+de ligações, incluindo as conexões internas da protoboard. Nessa versão o contador
+mostra `5 de 7`, mas clicar nele abre a confirmação de que não existem conexões
+não roteadas nessa vista. [Registro de problema semelhante no Fritzing](https://github.com/fritzing/fritzing-app/issues/3616)
 
 ## Pinagem prevista
 

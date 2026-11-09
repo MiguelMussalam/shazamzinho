@@ -165,7 +165,7 @@ Endereço I²C típico: `0x3C`. Alimentação (3.3V/GND) de OLED e INMP441 sai d
 
 ### 4.5 Diagramas de montagem
 
-- Rascunho editável no [Fritzing](fritzing/Shazamzin.fzz). Consulte a [revisão das ligações](fritzing/README.md) antes de montar.
+- Montagem em protoboard disponível em [arquivo editável do Fritzing](fritzing/Shazamzin.fzz) e [vista exportada](fritzing/Shazamzin_bb.svg). Os ajustes e a pinagem estão no [guia de montagem](fritzing/README.md).
 
 ---
 

@@ -90,7 +90,7 @@ com os fingerprints reais.
 
 ### Firmware
 
-Consulte a [revisão da montagem no Fritzing](docs/fritzing/README.md) antes de ligar o hardware.
+Consulte o [guia de montagem no Fritzing](docs/fritzing/README.md) para posicionar os módulos e os jumpers.
 
 Requer a toolchain ESP-IDF via PlatformIO. Ver
 [`docs/esp-idf-notes.md`](docs/esp-idf-notes.md) e [`firmware/README`](firmware/).
