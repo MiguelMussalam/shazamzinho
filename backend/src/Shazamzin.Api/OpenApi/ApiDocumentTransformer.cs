@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using Shazamzin.Api.Middleware;
+using Shazamzin.Api.Ingestion;
 
 namespace Shazamzin.Api.OpenApi;
 
@@ -60,6 +61,29 @@ internal sealed class ApiDocumentTransformer : IOpenApiDocumentTransformer
                         }
                     }
                 };
+            }
+        }
+
+        if (document.Paths.TryGetValue(FingerprintIngestionEndpoint.Path, out var ingestionPath) &&
+            ingestionPath.Operations is { } ingestionOperations)
+        {
+            document.Components.SecuritySchemes["IngestionKey"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.ApiKey,
+                Name = FingerprintIngestionEndpoint.KeyHeader,
+                In = ParameterLocation.Header,
+                Description = "Chave de escrita configurada em Ingestion:ApiKey."
+            };
+
+            foreach (var operation in ingestionOperations.Values)
+            {
+                operation.Security =
+                [
+                    new OpenApiSecurityRequirement
+                    {
+                        [new OpenApiSecuritySchemeReference("IngestionKey", document)] = []
+                    }
+                ];
             }
         }
 
