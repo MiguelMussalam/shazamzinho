@@ -92,7 +92,12 @@ chip), senão a porta COM não aparece.
 
 ### 2. Pegar o código desta branch
 
+> ⚠️ **O caminho NÃO pode ter espaços.** O ESP-IDF falha com
+> `Detected a whitespace character in project paths`. Clone em algo como
+> `C:\dev\` ou `C:\`, nunca numa pasta com espaço no nome (ex.: `Meus Projetos`).
+
 ```powershell
+cd C:\dev        # uma pasta sem espaços no caminho
 git clone https://github.com/MiguelMussalam/shazamzinho.git
 cd shazamzinho
 git checkout feat/sinal-de-vida-mic-oled
