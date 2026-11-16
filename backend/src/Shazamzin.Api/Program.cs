@@ -10,6 +10,8 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Context;
 using Shazamzin.Api.Middleware;
+using Shazamzin.Api.Ingestion;
+using Shazamzin.Infrastructure.Ingestion;
 using Shazamzin.Api.OpenApi;
 using Shazamzin.Core.Codec;
 using Shazamzin.Core.Interfaces;
@@ -42,7 +44,8 @@ builder.Services.AddOpenApi(options => options.AddDocumentTransformer<ApiDocumen
 var matchingOptions = builder.Configuration.GetSection(MatchingOptions.SectionName).Get<MatchingOptions>() ?? new MatchingOptions();
 var provider = builder.Configuration[$"{MatchingOptions.SectionName}:Provider"] ?? "Valkey";
 
-if (provider.Equals("Fake", StringComparison.OrdinalIgnoreCase))
+var useFake = provider.Equals("Fake", StringComparison.OrdinalIgnoreCase);
+if (useFake)
 {
     builder.Services.AddSingleton<IMatchingService, FakeMatchingService>();
     builder.Services.AddSingleton<IHealthProbe, DisabledHealthProbe>();
@@ -64,6 +67,8 @@ else
     builder.Services.AddSingleton(matchingOptions);
     builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(valkeyOptions));
     builder.Services.AddSingleton<ISongRepository>(_ => new SqliteSongRepository(sqliteConnectionString));
+    builder.Services.AddSingleton(services => new CatalogWriter(sqliteConnectionString,
+        services.GetRequiredService<IConnectionMultiplexer>()));
     builder.Services.AddSingleton<IMatchingService, ValkeyMatchingService>();
     builder.Services.AddSingleton<IHealthProbe, ValkeyHealthProbe>();
 }
@@ -173,6 +178,8 @@ app.MapPost("/match", async (HttpContext context, IMatchingService matching, ILo
 .Produces(StatusCodes.Status401Unauthorized)
 .Produces(StatusCodes.Status413PayloadTooLarge)
 .Produces(StatusCodes.Status415UnsupportedMediaType);
+
+if (!useFake) app.MapFingerprintIngestion();
 
 app.Run();
 

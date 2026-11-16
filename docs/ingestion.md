@@ -125,3 +125,36 @@ Validação manual: duas músicas do dataset de testes usado pelo Olaf, cinco co
 de 3 s nos offsets 10/25/34/50/75 da primeira música, uma consulta MP3 independente
 e uma segunda música consultada antes e depois da indexação. Esse catálogo pequeno
 não valida ainda ruído ambiente, captura por microfone ou escala de milhares de músicas.
+
+## Cadastro de fingerprints pela API
+
+Use **POST /catalog/fingerprints** com Content-Type application/json e o
+cabeçalho X-Ingestion-Key. Configure no servidor Ingestion__ApiKey (uma chave
+distinta de Auth__ApiKey) e Ingestion__Profile (o valor completo impresso pela
+CLI no campo profile da extração). O cadastro fica disponível com o provider
+Valkey e usa o mesmo par SQLite/Valkey que a consulta. O perfil precisa coincidir
+com o configurado e com a identidade do catálogo. Use fingerprints gerados para
+a faixa inteira, com tempos em milissegundos a partir do início da faixa.
+
+```json
+{
+  "file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "profile": "valor do campo profile da CLI",
+  "title": "Minha faixa",
+  "artist": "Meu artista",
+  "album": "Meu álbum",
+  "duration_sec": 180,
+  "fingerprints": [
+    { "hash": 2147483648, "timestamp_ms": 1000 }
+  ]
+}
+```
+
+Substitua o hash de exemplo pelo SHA-256 do arquivo original. O servidor recebe
+esse valor do cliente e o usa como identidade para reenvios. O endpoint recebe
+de 1 a 65.535 fingerprints e até 4 MiB. Álbum e duração são opcionais. O exemplo
+mostra apenas um fingerprint para ilustrar o formato.
+
+O cadastro novo retorna 201 com song_id, fingerprints e skipped: false. Um
+reenvio concluído retorna 200 e skipped: true. Para reconhecer um trecho, envie
+o payload binário ao POST /match com X-Api-Key, conforme docs/protocol.md.
