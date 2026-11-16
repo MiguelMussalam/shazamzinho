@@ -74,25 +74,68 @@ Detalhes (tags, idempotência, cadastro via `POST /catalog/fingerprints`, limite
 
 ---
 
-## Rodar o firmware do zero (sinal de vida)
+## Compilar e gravar o firmware do zero (sinal de vida)
+
+Tutorial completo para compilar e gravar o firmware **numa máquina nova** (de
+preferência com cabo de rede — a 1ª build baixa ~1 GB de toolchain).
 
 Hardware: ESP32 DevKit V1 + microfone INMP441 + OLED SSD1306, montados conforme o
 [guia de montagem](docs/fritzing/README.md) (pinagem lá).
 
-```powershell
-# 1. Credenciais (config.h é gitignored — só o Wi-Fi importa nesta fase)
-cp firmware/main/config.h.example firmware/main/config.h   # preencha WIFI_SSID / WIFI_PASSWORD
+### 1. Instalar o PlatformIO + driver USB
 
-# 2. Compilar, gravar e abrir o monitor serial (ESP32 ligado no USB)
+- **VS Code:** instale a extensão **PlatformIO IDE** (já traz o comando `pio`); ou
+- **Linha de comando** (requer Python 3): `pip install platformio`.
+
+Instale também o **driver USB-serial** da placa (**CP210x** ou **CH340**, conforme o
+chip), senão a porta COM não aparece.
+
+### 2. Pegar o código desta branch
+
+```powershell
+git clone https://github.com/MiguelMussalam/shazamzinho.git
+cd shazamzinho
+git checkout feat/sinal-de-vida-mic-oled
+```
+
+### 3. Credenciais (config.h)
+
+```powershell
+cp firmware/main/config.h.example firmware/main/config.h
+```
+
+Para o sinal de vida basta `WIFI_SSID` / `WIFI_PASSWORD` — e mesmo **sem Wi-Fi válido**
+ele roda (mostra "sem Wi-Fi" e a barra de VU funciona igual).
+
+### 4. Compilar
+
+```powershell
 cd firmware
+pio run
+```
+
+> ⚠️ **Primeira build:** o PlatformIO baixa o toolchain ESP-IDF 5.4 (~1 GB) e as
+> dependências — pode levar **10–30 min** dependendo da conexão (por isso o cabo de
+> rede ajuda). É custo único da máquina; as próximas builds levam ~1–2 min.
+
+### 5. Gravar na placa + abrir o serial
+
+```powershell
 pio run -t upload -t monitor
 ```
 
-**O que esperar:** o OLED mostra `Shazamzin`, o IP (ou "sem Wi-Fi") e `Ouvindo...`, com
-uma **barra de VU que sobe ao falar/bater palma** perto do microfone. No serial, logs
-`nivel=...`. Isso prova mic + display + CPU funcionando juntos.
+- Mais de uma porta? `pio device list` e depois `pio run -t upload -t monitor --upload-port COMx`.
+- Travou em "Connecting..."? Segure o botão **BOOT** da placa durante a conexão.
 
-Ajustes de bancada e detalhes dos módulos: [firmware/README.md](firmware/README.md).
+### 6. O que esperar
+
+OLED: "Conectando Wi-Fi..." por alguns segundos, depois `Shazamzin`, o IP (ou
+"sem Wi-Fi") e `Ouvindo...`, com uma **barra de VU que sobe ao falar/bater palma**
+perto do microfone. No serial (115200): logs `nivel=...`. Barra reagindo ao som =
+mic + display + CPU funcionando juntos.
+
+Ajustes de bancada (endereço I2C `0x3C`/`0x3D`, sensibilidade) e detalhes dos módulos:
+[firmware/README.md](firmware/README.md).
 
 ---
 
