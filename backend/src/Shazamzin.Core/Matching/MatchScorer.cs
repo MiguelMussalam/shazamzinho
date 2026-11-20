@@ -50,19 +50,36 @@ public static class MatchScorer
         if (histogram.Count == 0)
             return new ScoreResult(hashesHit, null);
 
-        // Desempate determinístico: mais votos, depois menor song_id, depois menor bucket.
-        var best = histogram
-            .OrderByDescending(kv => kv.Value.Count)
-            .ThenBy(kv => kv.Key.SongId)
-            .ThenBy(kv => kv.Key.Bucket)
-            .First();
+        // O pico é procurado numa janela de DOIS buckets vizinhos. Uma captura que não começa
+        // alinhada ao passo do Olaf (16 ms) faz os deltas oscilarem alguns ms em torno do valor
+        // verdadeiro; se esse valor cai perto da borda de um bucket, os votos se dividem entre
+        // dois buckets e nenhum sozinho alcança o limiar. Somar o vizinho junta o pico de volta.
+        (int SongId, long Bucket, int Count, long SumDeltaMs) best = default;
+        var found = false;
+        foreach (var (key, _) in histogram)
+        {
+            foreach (var start in new[] { key.Bucket - 1, key.Bucket })
+            {
+                histogram.TryGetValue((key.SongId, start), out var first);
+                histogram.TryGetValue((key.SongId, start + 1), out var second);
+                var count = first.Count + second.Count;
+                // Desempate determinístico: mais votos, depois menor song_id, depois menor bucket.
+                if (!found || count > best.Count ||
+                    (count == best.Count && (key.SongId < best.SongId ||
+                                             (key.SongId == best.SongId && start < best.Bucket))))
+                {
+                    best = (key.SongId, start, count, first.SumDeltaMs + second.SumDeltaMs);
+                    found = true;
+                }
+            }
+        }
 
-        if (best.Value.Count < minScore)
+        if (best.Count < minScore)
             return new ScoreResult(hashesHit, null);
 
-        var offsetSec = best.Value.SumDeltaMs / (double)best.Value.Count / 1000.0;
-        var confidence = Math.Min(1.0, best.Value.Count / (double)hashesHit);
-        return new ScoreResult(hashesHit, new SongScore(best.Key.SongId, best.Value.Count, offsetSec, confidence));
+        var offsetSec = best.SumDeltaMs / (double)best.Count / 1000.0;
+        var confidence = Math.Min(1.0, best.Count / (double)hashesHit);
+        return new ScoreResult(hashesHit, new SongScore(best.SongId, best.Count, offsetSec, confidence));
     }
 
     /// <summary>Divisão inteira arredondando para −∞ (o delta pode ser negativo).</summary>

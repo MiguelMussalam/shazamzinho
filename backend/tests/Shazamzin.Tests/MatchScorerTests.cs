@@ -58,6 +58,36 @@ public class MatchScorerTests
     }
 
     [Fact]
+    public void VotesSplitAcrossABucketBorder_AreCountedTogether()
+    {
+        // Captura desalinhada: o delta verdadeiro é 3000 ms (borda dos buckets de 50 ms) e
+        // oscila ±8 ms. Metade dos votos cai no bucket [2950,3000) e metade em [3000,3050).
+        var query = Query(10);
+        var postings = query.Select((f, i) => (f, i)).ToDictionary(
+            x => x.f.Hash,
+            x => new[] { new Posting(5, (int)x.f.TimestampMs + 3_000 + (x.i % 2 == 0 ? -8 : 8)) });
+
+        var result = MatchScorer.Score(query, postings, Bucket, MinScore);
+
+        result.Best.Should().NotBeNull("5 + 5 votos em buckets vizinhos formam um pico de 10");
+        result.Best!.SongId.Should().Be(5);
+        result.Best.Score.Should().Be(10);
+        result.Best.OffsetSec.Should().BeApproximately(3.0, 1e-9);
+    }
+
+    [Fact]
+    public void BucketsTwoApart_AreNotMerged()
+    {
+        // deltas 3000 e 3100: buckets 60 e 62 — não são vizinhos, não podem somar.
+        var query = Query(10);
+        var postings = query.Select((f, i) => (f, i)).ToDictionary(
+            x => x.f.Hash,
+            x => new[] { new Posting(5, (int)x.f.TimestampMs + (x.i % 2 == 0 ? 3_000 : 3_100)) });
+
+        MatchScorer.Score(query, postings, Bucket, MinScore).Best.Should().BeNull();
+    }
+
+    [Fact]
     public void ScatteredCollisions_StayBelowThreshold()
     {
         var query = Query(40);

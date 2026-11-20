@@ -1,4 +1,6 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Shazamzin.Core.Codec;
@@ -55,8 +57,16 @@ add.SetAction(async (parse, cancellationToken) => await RunAsync(async () =>
 var extract = new Command("extract", "Decodifica um trecho separadamente e gera um payload .bin para POST /match.");
 var extractPath = new Option<string>("--path") { Required = true, Description = "Arquivo de áudio de origem." };
 var output = new Option<string>("--output") { Required = true, Description = "Arquivo .bin de saída; não sobrescreve arquivos existentes." };
-var offset = new Option<double>("--offset-seconds") { Description = "Início do trecho em segundos (padrão 0)." };
-var duration = new Option<double?>("--duration-seconds") { Description = "Duração do trecho em segundos; omitido = até o fim." };
+var offset = new Option<double>("--offset-seconds")
+{
+    Description = "Início do trecho em segundos (padrão 0). Aceita 10.5 ou 10,5.",
+    CustomParser = r => ParseSeconds(r) ?? 0
+};
+var duration = new Option<double?>("--duration-seconds")
+{
+    Description = "Duração do trecho em segundos; omitido = até o fim. Aceita 3.5 ou 3,5.",
+    CustomParser = ParseSeconds
+};
 var session = new Option<uint>("--session-id") { DefaultValueFactory = _ => 1, Description = "ID da sessão no protocolo v1." };
 var rawOutput = new Option<string?>("--raw-output") { Description = "Opcional: salva PCM float32 LE para comparar com a CLI C." };
 foreach (var option in new Option[] { extractPath, output, offset, duration, session, rawOutput }) extract.Options.Add(option);
@@ -88,6 +98,17 @@ root.Subcommands.Add(extract);
 return await root.Parse(args).InvokeAsync();
 
 static string Override(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+// Segundos independentes da cultura do Windows. Sem isto, em pt-BR "10.6" era lido como 106
+// (o ponto é separador de milhar) e o trecho extraído saía de outro lugar da música.
+static double? ParseSeconds(ArgumentResult result)
+{
+    var token = result.Tokens.Count > 0 ? result.Tokens[0].Value : "";
+    if (double.TryParse(token.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+        && double.IsFinite(value) && value >= 0)
+        return value;
+    result.AddError($"Valor em segundos inválido: '{token}'. Use, por exemplo, 10.5 ou 10,5.");
+    return null;
+}
 static void Print(object value) => Console.WriteLine(JsonSerializer.Serialize(value,
     new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower, WriteIndented = true }));
 static async Task WriteNewAsync(string path, byte[] bytes, CancellationToken cancellationToken)
