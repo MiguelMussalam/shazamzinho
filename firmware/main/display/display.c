@@ -123,9 +123,17 @@ static const uint8_t FONT5X7[][5] = {
     {0x08,0x04,0x08,0x10,0x08}, // ~
 };
 
+// Sem OLED o firmware precisa seguir funcionando (serial + rede). Por isso nenhuma
+// falha aqui aborta: o erro é logado, s_ok fica false e as funções de desenho viram no-op.
+static bool s_tentado = false;
+static esp_err_t s_resultado = ESP_FAIL;
+
 esp_err_t display_init(void)
 {
-    if (s_ok) return ESP_OK;   // idempotente: pode ser chamado no app_main e na task
+    // idempotente: chamado no app_main e na task. Só tenta uma vez — repetir depois de
+    // uma falha recriaria o barramento I2C, que já ficou alocado.
+    if (s_tentado) return s_resultado;
+    s_tentado = true;
 
     // 1) Barramento I2C mestre (nova API i2c_master do ESP-IDF 5.x).
     i2c_master_bus_handle_t bus = NULL;
@@ -140,7 +148,23 @@ esp_err_t display_init(void)
     esp_err_t err = i2c_new_master_bus(&bus_cfg, &bus);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "i2c_new_master_bus falhou: %s", esp_err_to_name(err));
-        return err;
+        return s_resultado = err;
+    }
+
+    // Sonda o endereço antes de configurar o painel: dá um diagnóstico claro quando o
+    // OLED não está ligado (ou está em 0x3D) em vez de uma cascata de erros de NACK.
+    err = i2c_master_probe(bus, OLED_I2C_ADDR, 50);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "OLED nao respondeu em 0x%02X (%s): seguindo sem display. "
+                 "Confira SDA=GPIO%d, SCL=GPIO%d, VCC e GND.",
+                 OLED_I2C_ADDR, esp_err_to_name(err), OLED_SDA_GPIO, OLED_SCL_GPIO);
+        for (uint16_t addr = 0x08; addr < 0x78; addr++) {
+            if (i2c_master_probe(bus, addr, 20) == ESP_OK) {
+                ESP_LOGW(TAG, "  dispositivo I2C encontrado em 0x%02X", addr);
+            }
+        }
+        i2c_del_master_bus(bus);
+        return s_resultado = err;
     }
 
     // 2) Camada panel_io I2C para o SSD1306.
@@ -156,7 +180,7 @@ esp_err_t display_init(void)
     err = esp_lcd_new_panel_io_i2c(bus, &io_cfg, &io);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "panel_io_i2c falhou: %s", esp_err_to_name(err));
-        return err;
+        return s_resultado = err;
     }
 
     // 3) Painel SSD1306 (componente gerenciado espressif/esp_lcd_panel_ssd1306).
@@ -169,14 +193,18 @@ esp_err_t display_init(void)
     err = esp_lcd_new_panel_ssd1306(io, &panel_cfg, &s_panel);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "new_panel_ssd1306 falhou: %s", esp_err_to_name(err));
-        return err;
+        return s_resultado = err;
     }
 
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel));
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, true));
+    if ((err = esp_lcd_panel_reset(s_panel)) != ESP_OK ||
+        (err = esp_lcd_panel_init(s_panel)) != ESP_OK ||
+        (err = esp_lcd_panel_disp_on_off(s_panel, true)) != ESP_OK) {
+        ESP_LOGE(TAG, "inicializacao do SSD1306 falhou: %s — seguindo sem display", esp_err_to_name(err));
+        return s_resultado = err;
+    }
 
     s_ok = true;
+    s_resultado = ESP_OK;
     display_clear();
     display_flush();
     ESP_LOGI(TAG, "OLED SSD1306 pronto (%dx%d, addr 0x%02X)", OLED_WIDTH, OLED_HEIGHT, OLED_I2C_ADDR);
