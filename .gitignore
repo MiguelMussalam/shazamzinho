@@ -47,3 +47,7 @@ firmware/sdkconfig.*
 # dados gerados por scripts/seed-fake-data.ps1
 backend/data/seed-queries/
 backend/data/seed-hashes.txt
+
+# resultados da ingestão em lote (scripts/ingest-folder.ps1)
+backend/data/ingestao-*.csv
+backend/logs/
