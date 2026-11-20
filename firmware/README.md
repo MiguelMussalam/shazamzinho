@@ -6,10 +6,12 @@ e `../docs/esp-idf-notes.md`.
 ## Antes de compilar
 
 ```bash
+../native/build.ps1                      # clona o Olaf no commit fixado (o componente usa esses fontes)
 cp main/config.h.example main/config.h   # preencha SSID/senha/URL/API key
 ```
 
-`config.h` é gitignored.
+`config.h` é gitignored. `SERVER_URL` e `API_KEY` saem prontos da saída de
+`../scripts/subir-servidor.ps1`. O Wi-Fi precisa ser de 2,4 GHz.
 
 ## Build / flash / monitor
 
@@ -20,15 +22,33 @@ pio run                      # compila
 pio run -t upload -t monitor # grava e abre o serial (115200)
 ```
 
-## Estado
+## Fluxo
 
-- **Fase 0 (feito):** `main.c` conecta no Wi-Fi e imprime o IP no serial.
-- **Sinal de vida (feito):** `audio_capture` (I2S/INMP441), `display` (OLED SSD1306)
-  e `state_machine` lêem o microfone e mostram status + IP + barra de VU no OLED.
-  A barra se mexe conforme o som captado — prova mic + display + CPU juntos.
-- **Fases 4-5 (stubs):** `fingerprint`, `network` — ainda com TODO. `protocol` está
-  implementado mas não validado contra o servidor.
-- **Olaf:** entra em `components/olaf/` na Fase 4 (fingerprint real).
+`OCIOSO → (CAPTURANDO) → PROCESSANDO → CONSULTANDO → RESULTADO → OCIOSO`, uma vez
+automaticamente no boot e depois a cada clique no botão **BOOT** (GPIO 0, já vem na placa).
+
+| Módulo | Função |
+|---|---|
+| `captura_de_audio/` | INMP441 via I²S (`i2s_std`), 8 kHz mono |
+| `clipe/` | trecho de música na flash, usado quando `FONTE_AUDIO_CLIPE = 1` (sem microfone) |
+| `fingerprint/` | Olaf (`components/olaf`), mesmo código e perfil do catálogo |
+| `protocolo/` | payload binário v1 (`docs/protocol.md`) |
+| `network/` | `POST /match` via `esp_http_client`, HTTPS com o bundle de certificados do ESP-IDF |
+| `resposta/` | leitura do JSON com cJSON |
+| `display/` | OLED SSD1306 opcional: sem ele o firmware segue só com o serial |
+| `maquina_de_estado/` | orquestra o ciclo; imprime os fingerprints e o `RESULTADO` no serial |
+
+## Estado (2026-11-20)
+
+Validado numa placa **sem microfone e sem OLED**, com `FONTE_AUDIO_CLIPE = 1`, no hotspot do
+celular, consultando a API pelo túnel do Cloudflare:
+
+- fingerprints do ESP **100% iguais** aos do PC no mesmo PCM (119/119), em ~720 ms;
+- música reconhecida corretamente em **~3,6 s** do início ao resultado
+  (Olaf 0,7 s + HTTPS ~2,7 s + servidor < 10 ms);
+- heap volta a ~214 KB livres após cada ciclo; pior momento ~70 KB livres (durante o Olaf).
+
+Falta validar com o microfone (`FONTE_AUDIO_CLIPE = 0`) e o OLED físicos.
 
 O OLED usa o driver SSD1306 que já vem no componente `esp_lcd` do ESP-IDF 5.4
 (sem dependências externas); o `audio_capture` usa a API `i2s_std`.

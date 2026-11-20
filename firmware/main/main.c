@@ -109,7 +109,7 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(TAG, "=== Shazamzin firmware — Fase 0 ===");
+    ESP_LOGI(TAG, "=== Shazamzin firmware ===");
     ESP_LOGI(TAG, "Device ID: %s | heap livre: %lu bytes",
              DEVICE_ID, (unsigned long) esp_get_free_heap_size());
 
@@ -122,14 +122,13 @@ void app_main(void)
     display_text(0, 3, "Wi-Fi...");
     display_flush();
 
-    if (!wifi_init_sta()) {
-        // Sem Wi-Fi ainda dá pra provar mic + OLED numa demo offline.
-        ESP_LOGW(TAG, "Sem Wi-Fi — seguindo so com o sinal de vida.");
+    bool wifi_ok = wifi_init_sta();
+    if (!wifi_ok) {
+        // Sem Wi-Fi ainda dá pra gerar os fingerprints e comparar com o PC pelo serial.
+        ESP_LOGW(TAG, "Sem Wi-Fi — o ciclo para antes da consulta ao servidor.");
         snprintf(s_ip_str, sizeof(s_ip_str), "sem Wi-Fi");
     }
 
-    // Fase 4 (sinal de vida): inicia a task que lê o microfone e atualiza o OLED
-    // (status + IP + barra de VU). Fingerprint/Olaf/rede entram nas fases seguintes.
-    ESP_LOGI(TAG, "Iniciando sinal de vida (mic + OLED)...");
-    maquina_estado_iniciar(s_ip_str);
+    // Captura (ou clipe de teste) -> Olaf -> POST /match -> resultado no serial/OLED.
+    maquina_estado_iniciar(s_ip_str, wifi_ok);
 }

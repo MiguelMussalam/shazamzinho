@@ -12,3 +12,7 @@
 #define AUDIO_SAMPLE_RATE  8000
 #define FFT_SIZE           1024
 #define BATCH_WINDOW_MS    3000
+
+// Origem do áudio: 1 = trecho de música gravado na flash (main/clipe, gerado por
+// scripts/gerar-clipe-teste.ps1) — testa Olaf + rede sem microfone; 0 = microfone INMP441.
+#define FONTE_AUDIO_CLIPE  1

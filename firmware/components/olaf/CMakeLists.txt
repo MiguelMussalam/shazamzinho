@@ -1,0 +1,42 @@
+# Olaf (extração de fingerprints) como componente ESP-IDF.
+#
+# Compila exatamente os mesmos fontes da libolaf.dll do PC (native/CMakeLists.txt):
+# o Olaf clonado por native/build.ps1 no commit de native/olaf.version e a ponte
+# native/olaf_wrapper.c com o perfil de native/shazamzin_olaf_config.h.
+# Mesmo código + mesma configuração => fingerprints comparáveis com os do catálogo.
+
+set(SZ_NATIVE "${CMAKE_CURRENT_LIST_DIR}/../../../native")
+get_filename_component(SZ_NATIVE "${SZ_NATIVE}" ABSOLUTE)
+set(SZ_OLAF "${SZ_NATIVE}/olaf")
+
+if(NOT EXISTS "${SZ_OLAF}/src/olaf_fft.c")
+    message(FATAL_ERROR "Olaf ausente em ${SZ_OLAF}. Rode native/build.ps1 (clona o commit fixado) antes de compilar o firmware.")
+endif()
+
+file(STRINGS "${SZ_NATIVE}/olaf.version" SZ_OLAF_REVISION LIMIT_COUNT 1)
+execute_process(COMMAND git -C "${SZ_OLAF}" rev-parse HEAD
+    OUTPUT_VARIABLE SZ_OLAF_ACTUAL OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT SZ_OLAF_ACTUAL STREQUAL SZ_OLAF_REVISION)
+    message(FATAL_ERROR "Olaf em ${SZ_OLAF_ACTUAL}, esperado ${SZ_OLAF_REVISION} (native/olaf.version). Rode native/build.ps1.")
+endif()
+
+idf_component_register(
+    SRCS
+        "${SZ_NATIVE}/olaf_wrapper.c"
+        "${SZ_OLAF}/src/olaf_config.c"
+        "${SZ_OLAF}/src/olaf_fft.c"
+        "${SZ_OLAF}/src/olaf_ep_extractor.c"
+        "${SZ_OLAF}/src/olaf_fp_extractor.c"
+        "${SZ_OLAF}/src/olaf_max_filter_perceptual_van_herk.c"
+        "${SZ_OLAF}/src/pffft.c"
+    INCLUDE_DIRS "${SZ_NATIVE}"
+    PRIV_INCLUDE_DIRS "${SZ_OLAF}/src"
+)
+
+# Mesmas definições e flags da DLL: PFFFT escalar e sem contração de FMA
+# (o Xtensa tem madd.s; contrair mudaria o arredondamento em relação ao PC).
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    PFFFT_SIMD_DISABLE
+    SHAZAMZIN_OLAF_BUILD
+    OLAF_REVISION="${SZ_OLAF_REVISION}")
+target_compile_options(${COMPONENT_LIB} PRIVATE -ffp-contract=off -Wno-unused-variable -Wno-unused-function)

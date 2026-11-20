@@ -2,26 +2,33 @@ idf_component_register(
     SRCS
         "main.c"
         "captura_de_audio/captura_de_audio.c"
+        "clipe/clipe_teste.c"
         "display/display.c"
         "fingerprint/fingerprint.c"
         "network/network.c"
         "protocolo/protocolo.c"
+        "resposta/resposta.c"
         "maquina_de_estado/maquina_de_estado.c"
     INCLUDE_DIRS
         "."
         "captura_de_audio"
+        "clipe"
         "display"
         "fingerprint"
         "network"
         "protocolo"
+        "resposta"
         "maquina_de_estado"
     REQUIRES
         esp_wifi
         esp_netif
         esp_event
+        esp_timer
         nvs_flash
         esp_http_client
+        mbedtls
         driver
         esp_lcd
         json
+        olaf
 )
