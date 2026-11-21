@@ -31,6 +31,22 @@ música gravado na flash (`FONTE_AUDIO_CLIPE = 1`). Branch `feat/pipeline-esp-se
 **Ainda depende do hardware:** validar o microfone (M1) e o OLED. **Nova decisão (D6):** janela
 de captura de 3 s (90%, resposta mais rápida) ou 5 s (97%, ~2 s a mais).
 
+### Atualização — 2026-11-20 (noite)
+
+Decisões: **apresentação na segunda, 23/11** (D1); **captura de 5 s** (D6); túnel rápido
+mantido por enquanto (D4). Com isso o foco passou a ser deixar a `main` pronta para o teste
+integrado de 21/11 ([`docs/teste-integrado.md`](teste-integrado.md)):
+
+- Captura do microfone **em fluxo** (5 s não cabem na RAM como buffer), sobre uma API nova da
+  ponte nativa, idêntica à extração do PC (testado no PC e na placa).
+- Ganho do microfone configurável e com saturação (antes um som alto dava a volta e virava
+  ruído), mais medição de nível em dBFS a cada captura.
+- Modo microfone rodado na placa sem microfone: captura, consulta e volta ao ocioso sem travar.
+- `match_log` gravado a cada consulta (histórico de reconhecimentos).
+- Valkey manteve o catálogo após o Docker reiniciar (verificado).
+- `subir-servidor.ps1` usa `127.0.0.1`: com `localhost` o PowerShell tentava IPv6 e não achava a API.
+- Playlist do catálogo para o teste: `scripts/gerar-playlist.ps1`.
+
 ---
 
 ## 1. Estado atual (levantamento da manhã de 2026-11-20)
@@ -163,7 +179,7 @@ A limpeza de disco vem antes de tudo: com menos de 2 GB livres, qualquer outro p
       o clique no BOOT ainda precisa ser conferido por alguém na frente da placa._
 - [ ] OLED mostrando cada estado, título e artista do resultado, "não reconhecida", e erro de rede com
       mensagem clara.
-- [ ] Backend: gravar cada consulta no `match_log` (device, música, confiança, hashes, tempo).
+- [x] Backend: gravar cada consulta no `match_log` (device, música, confiança, hashes, tempo).
 - [ ] Medir a latência fim a fim (botão → resultado na tela) e registrar no `sprint-log`.
 
 **Pronto quando:** com o mic, 20 músicas diferentes tocadas por uma caixa de som, ≥ 80% reconhecidas
@@ -178,7 +194,7 @@ em ≤ 5 s, servidor no notebook na mesma rede.
       (SQLite × Valkey consistentes).
 - [x] Barra de progresso e resumo final (ok / pulados / falhas, com motivo).
 - [x] Ingerir o catálogo decidido em D2 no par oficial (`backend/data/catalogo.db` + database 1).
-- [ ] Conferir que o Valkey mantém o catálogo após reiniciar o Docker (volume nomeado + snapshot).
+- [x] Conferir que o Valkey mantém o catálogo após reiniciar o Docker (volume nomeado + snapshot).
 - [ ] Script de backup e restauração do par SQLite + `dump.rdb`.
 - [ ] Teste de ruído: 30 consultas extraídas de músicas do catálogo, tocadas por caixa de som e
       capturadas pelo microfone do notebook, mais 10 de músicas fora do catálogo (precisam dar no-match).

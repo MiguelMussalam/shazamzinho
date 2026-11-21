@@ -194,3 +194,20 @@ Levantamento do estado e plano em `docs/plano-finalizacao.md`. Trabalho na branc
 - O túnel rápido muda de URL a cada reinício do servidor, o que obriga a regravar o ESP (decisão D4).
 - O HTTPS domina o tempo de resposta (~2,7 s em dados móveis). Reaproveitar a conexão ou usar LAN encurta isso.
 - Microfone e OLED físicos ainda não testados nesta placa.
+
+### 2026-11-20 (noite) — pronto para o teste integrado
+
+- Decisões: apresentação na segunda (23/11), captura de 5 s, túnel rápido por enquanto.
+- **Ponte nativa:** API de fluxo `shazamzin_olaf_stream_new/feed/finish`, mesma sequência de
+  chamadas de `shazamzin_olaf_extract`. `OlafStreamTests`: resultado idêntico alimentando amostra a
+  amostra, em blocos de 128/256/1000 e em tamanhos irregulares; curto/silêncio/NaN como no bloco.
+- **Firmware:** microfone processado em fluxo (sem buffer de 5 s); `GANHO_MIC` (padrão 40x, como o
+  exemplo ESP32 do Olaf) com saturação; log de pico/RMS/saturação por captura com dicas de ajuste.
+  O antigo `>>14` para int16 dava a volta em sons altos; agora satura.
+- Placa: modo clipe pelo fluxo → 119/119 iguais e reconhecida; modo microfone sem microfone →
+  5,0 s capturados, silêncio, "não reconhecida", heap mínimo 55 KB, sem travar.
+- **Backend:** `/match` grava o `match_log` (falha ao gravar não derruba a resposta). 70/70 testes.
+- Docker caiu durante o trabalho; ao reiniciar, o catálogo estava intacto no database 1.
+- `subir-servidor.ps1` não achava a API: o PowerShell 5.1 resolvia `localhost` para IPv6 e a API
+  escuta em IPv4. Trocado por `127.0.0.1` (também no túnel); 503 agora é mostrado como "degradada".
+- Guia `docs/teste-integrado.md` e playlist `scripts/gerar-playlist.ps1`.

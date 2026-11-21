@@ -61,7 +61,15 @@ try {
     $saude = $null
     for ($i = 0; $i -lt 60 -and -not $saude; $i++) {
         Start-Sleep 1
-        try { $saude = Invoke-RestMethod "http://localhost:$Port/health" -TimeoutSec 2 } catch { }
+        try { $saude = Invoke-RestMethod "http://127.0.0.1:$Port/health" -TimeoutSec 2 }
+        catch {
+            # 503 = API de pé, mas Valkey ou SQLite indisponível: mostra o motivo em vez de esperar à toa.
+            $r = $_.Exception.Response
+            if ($r -and [int]$r.StatusCode -eq 503) {
+                $corpo = (New-Object IO.StreamReader($r.GetResponseStream())).ReadToEnd() | ConvertFrom-Json
+                Write-Host ("API de pé, mas degradada: valkey={0} sqlite={1}. Tentando de novo..." -f $corpo.valkey, $corpo.sqlite)
+            }
+        }
         if ($api.HasExited) { throw "A API encerrou. Veja $logs\api.out.log" }
     }
     if (-not $saude) { throw "A API não respondeu em 60 s. Veja $logs\api.out.log" }
@@ -75,7 +83,7 @@ try {
     if ($Tunnel) {
         $cfLog = Join-Path $logs 'cloudflared.log'
         Remove-Item $cfLog -ErrorAction SilentlyContinue
-        $tunel = Start-Process cloudflared -ArgumentList @('tunnel', '--no-autoupdate', '--url', "http://localhost:$Port") `
+        $tunel = Start-Process cloudflared -ArgumentList @('tunnel', '--no-autoupdate', '--url', "http://127.0.0.1:$Port") `
             -NoNewWindow -PassThru -RedirectStandardError $cfLog -RedirectStandardOutput (Join-Path $logs 'cloudflared.out.log')
         $url = $null
         for ($i = 0; $i -lt 60 -and -not $url; $i++) {

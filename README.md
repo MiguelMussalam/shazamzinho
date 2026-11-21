@@ -1,23 +1,23 @@
 # Shazamzinho
 
-Reconhecimento de músicas com **ESP32 + Olaf + .NET**. O backend reconhece trechos
-de áudio reais; o firmware do ESP32 já dá "sinal de vida" (captura pelo microfone e
-mostra no OLED), e a ligação ESP32 → backend é a próxima fase.
+Reconhecimento de músicas com **ESP32 + Olaf + .NET**. O ESP32 capta o áudio, gera os
+fingerprints com o Olaf no próprio chip e consulta a API, que compara contra um catálogo
+no Valkey + SQLite e devolve título e artista para o OLED.
 
 ![Montagem do ESP32 com microfone INMP441 e display OLED na protoboard](docs/fritzing/Shazamzin_bb.png)
 
 [Arquivo do Fritzing](docs/fritzing/Shazamzin.fzz) · [Guia de montagem](docs/fritzing/README.md) · [Arquitetura](docs/architecture.md)
 
-## O que funciona hoje
+## O que funciona hoje (2026-11-20)
 
 | Parte | Estado |
 |---|---|
-| **Backend** (API + ingestão) | Reconhece trechos reais de áudio via CLI/Scalar. |
-| **Firmware** (sinal de vida) | Captura o microfone (I2S) e mostra status + IP + barra de VU no OLED. |
-| **ESP32 → backend** | Ainda não — o módulo `network` do firmware é stub (fase seguinte). |
+| **Backend** (API + ingestão) | Catálogo de 586 músicas (MTG-Jamendo). Trechos de 5 s: 97% de acerto, nenhuma música errada. |
+| **Olaf no ESP32** | Fingerprints 100% iguais aos do PC no mesmo áudio, em ~0,7 s por 5 s de áudio. |
+| **ESP32 → backend** | Ciclo completo pelo hotspot + túnel Cloudflare: ~3,6 s até o resultado. |
+| **Microfone e OLED físicos** | Firmware pronto; falta o teste com o hardware montado. |
 
-Ou seja: o reconhecimento é testado hoje pela **CLI/Scalar**, não pelo ESP32. Os dois
-lados rodam de forma independente por enquanto.
+**Para testar tudo junto, siga [docs/teste-integrado.md](docs/teste-integrado.md).**
 
 ---
 
@@ -72,9 +72,29 @@ dotnet run --project backend/src/Shazamzin.Ingestion -- extract `
 Detalhes (tags, idempotência, cadastro via `POST /catalog/fingerprints`, limites):
 [docs/ingestion.md](docs/ingestion.md).
 
+### Catálogo de 586 músicas e servidor completo
+
+O catálogo usado nos testes vem do [MTG-Jamendo](https://github.com/MTG/mtg-jamendo-dataset)
+(músicas completas em Creative Commons, uso acadêmico): o arquivo `raw_30s_audio-low-00.tar`
+(1,66 GB, 586 faixas), baixado e extraído em `C:\shazamzinho-dados\jamendo` — ver o
+`docs/sprint-log.md` de 2026-11-20 para o comando com verificação SHA-256.
+
+```powershell
+# indexa a pasta inteira (~20 min); repetir é seguro
+./scripts/ingest-folder.ps1 -Path C:\shazamzinho-dados\jamendo\audio `
+  -JamendoMeta C:\shazamzinho-dados\jamendo\raw.meta.tsv `
+  -Sqlite "Data Source=./data/catalogo.db" -Valkey "localhost:6379,defaultDatabase=1"
+
+# Valkey + API (produção, chave aleatória em api-key.secret) + túnel público
+./scripts/subir-servidor.ps1
+
+# taxa de acerto com trechos aleatórios do catálogo
+./scripts/testar-reconhecimento.ps1 -Count 30 -DurationSeconds 5
+```
+
 ---
 
-## Compilar e gravar o firmware do zero (sinal de vida)
+## Compilar e gravar o firmware do zero
 
 Tutorial completo para compilar e gravar o firmware **numa máquina nova** (de
 preferência com cabo de rede — a 1ª build baixa ~1 GB de toolchain).
@@ -100,7 +120,7 @@ chip), senão a porta COM não aparece.
 cd C:\dev        # uma pasta sem espaços no caminho
 git clone https://github.com/MiguelMussalam/shazamzinho.git
 cd shazamzinho
-git checkout feat/sinal-de-vida-mic-oled
+./native/build.ps1   # clona o Olaf no commit fixado: o firmware compila esses mesmos fontes
 ```
 
 ### 3. Credenciais (config.h)
@@ -109,8 +129,10 @@ git checkout feat/sinal-de-vida-mic-oled
 cp firmware/main/config.h.example firmware/main/config.h
 ```
 
-Para o sinal de vida basta `WIFI_SSID` / `WIFI_PASSWORD` — e mesmo **sem Wi-Fi válido**
-ele roda (mostra "sem Wi-Fi" e a barra de VU funciona igual).
+Preencha `WIFI_SSID` / `WIFI_PASSWORD` (rede de **2,4 GHz**) e as linhas `SERVER_URL` /
+`API_KEY` impressas pelo `./scripts/subir-servidor.ps1`. `FONTE_AUDIO_CLIPE 0` usa o
+microfone; `1` usa um trecho de música gravado na flash (testa tudo sem microfone).
+Sem Wi-Fi válido o firmware ainda roda: gera os fingerprints e mostra "sem Wi-Fi".
 
 ### 4. Compilar
 
@@ -134,25 +156,14 @@ pio run -t upload -t monitor
 
 ### 6. O que esperar
 
-OLED: "Conectando Wi-Fi..." por alguns segundos, depois `Shazamzin`, o IP (ou
-"sem Wi-Fi") e `Ouvindo...`, com uma **barra de VU que sobe ao falar/bater palma**
-perto do microfone. No serial (115200): logs `nivel=...`. Barra reagindo ao som =
-mic + display + CPU funcionando juntos.
+OLED: "Conectando Wi-Fi...", depois `Shazamzin`, o IP e uma **barra de VU que sobe ao
+falar/bater palma** perto do microfone. Um primeiro reconhecimento roda sozinho no boot;
+depois, cada clique no botão **BOOT** ouve 5 s e consulta o servidor. O OLED mostra título
+e artista (ou "Nao reconhecida"), e o serial (115200) mostra a linha `RESULTADO ...` e o
+nível do áudio de cada captura. Sem OLED ligado, o firmware segue só com o serial.
 
-Ajustes de bancada (endereço I2C `0x3C`/`0x3D`, sensibilidade) e detalhes dos módulos:
-[firmware/README.md](firmware/README.md).
-
----
-
-## Ligar o ESP32 ao backend (próxima fase)
-
-Quando o módulo `network` do firmware sair do stub, a API local é exposta por um
-túnel para o ESP32 alcançá-la:
-
-1. Suba a API (passos acima) e um túnel: `cloudflared tunnel --url http://localhost:5184`.
-2. Copie a URL `https://<...>.trycloudflare.com/match` para `SERVER_URL` em `firmware/main/config.h`.
-
-Guia completo e fallbacks de demo: [scripts/setup-cloudflared.md](scripts/setup-cloudflared.md).
+Roteiro completo, diagnóstico e plano B: [docs/teste-integrado.md](docs/teste-integrado.md).
+Detalhes dos módulos: [firmware/README.md](firmware/README.md).
 
 ---
 
