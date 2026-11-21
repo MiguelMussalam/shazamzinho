@@ -67,3 +67,81 @@ cleanup:
     olaf_config_destroy(config);
     return status;
 }
+
+/* ---- Extração em fluxo (mesma sequência de chamadas de shazamzin_olaf_extract) ---- */
+
+struct sz_stream {
+    Olaf_Config *config;
+    Olaf_FFT *fft;
+    Olaf_EP_Extractor *ep;
+    Olaf_FP_Extractor *fp;
+    sz_fingerprint_callback callback;
+    void *user;
+    struct extracted_event_points *eps;
+    float window[SHAZAMZIN_BLOCK_SIZE]; /* últimas amostras recebidas */
+    float block[SHAZAMZIN_BLOCK_SIZE];  /* cópia que a FFT sobrescreve */
+    size_t filled;
+    size_t total;
+    int blocks;
+    int status;
+};
+
+SZ_API sz_stream *shazamzin_olaf_stream_new(sz_fingerprint_callback callback, void *user) {
+    if (!callback) return NULL;
+    sz_stream *s = calloc(1, sizeof(*s));
+    if (!s) return NULL;
+    s->callback = callback;
+    s->user = user;
+    s->config = shazamzin_olaf_config_new();
+    if (s->config) {
+        s->fft = olaf_fft_new(s->config);
+        s->ep = olaf_ep_extractor_new(s->config);
+        s->fp = olaf_fp_extractor_new(s->config);
+    }
+    if (!s->config || !s->fft || !s->ep || !s->fp) {
+        s->status = 2;
+        shazamzin_olaf_stream_finish(s);
+        return NULL;
+    }
+    return s;
+}
+
+SZ_API int shazamzin_olaf_stream_feed(sz_stream *s, const float *samples, size_t count) {
+    if (!s) return 1;
+    if (s->status) return s->status;
+    if (!samples && count) return s->status = 1;
+    for (size_t i = 0; i < count; i++) {
+        if (!isfinite(samples[i])) return s->status = 1;
+        if (++s->total / SHAZAMZIN_STEP_SIZE >= (1u << 23) - 100) return s->status = 1;
+        s->window[s->filled++] = samples[i];
+        if (s->filled < SHAZAMZIN_BLOCK_SIZE) continue;
+
+        /* Bloco completo: idêntico ao corpo do laço de shazamzin_olaf_extract. */
+        memcpy(s->block, s->window, sizeof(s->block));
+        olaf_fft_forward(s->fft, s->block);
+        s->eps = olaf_ep_extractor_extract(s->ep, s->block, s->blocks);
+        if (s->eps->eventPointIndex > s->config->eventPointThreshold) {
+            s->status = emit(s->fp, s->eps, s->blocks, s->callback, s->user);
+        }
+        s->blocks++;
+        /* Desliza um passo: o próximo bloco começa SHAZAMZIN_STEP_SIZE amostras depois. */
+        memmove(s->window, s->window + SHAZAMZIN_STEP_SIZE,
+                (SHAZAMZIN_BLOCK_SIZE - SHAZAMZIN_STEP_SIZE) * sizeof(float));
+        s->filled = SHAZAMZIN_BLOCK_SIZE - SHAZAMZIN_STEP_SIZE;
+        if (s->status) return s->status;
+    }
+    return 0;
+}
+
+SZ_API int shazamzin_olaf_stream_finish(sz_stream *s) {
+    if (!s) return 1;
+    int status = s->status;
+    /* extract só emite o final se houve ao menos um bloco (áudio >= 1024 amostras). */
+    if (!status && s->blocks > 0) status = emit(s->fp, s->eps, s->blocks, s->callback, s->user);
+    olaf_fp_extractor_destroy(s->fp);
+    olaf_ep_extractor_destroy(s->ep);
+    olaf_fft_destroy(s->fft);
+    olaf_config_destroy(s->config);
+    free(s);
+    return status;
+}

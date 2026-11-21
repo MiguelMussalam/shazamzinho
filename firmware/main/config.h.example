@@ -5,10 +5,23 @@
 
 #define WIFI_SSID        "sua-rede"
 #define WIFI_PASSWORD    "sua-senha"
-#define SERVER_URL       "https://xxx.trycloudflare.com/match"
-#define API_KEY          "dev-key-local"
+// Chave da API: peça a quem roda o servidor (arquivo api-key.secret dele). Fica só aqui,
+// fora do git. O ENDEREÇO do servidor não fica aqui: vem de main/servidor.h (versionado,
+// atualizado por scripts/subir-servidor.ps1 -Publicar) — basta `git pull` para pegar o atual.
+#define API_KEY          "peca-a-chave-a-quem-roda-o-servidor"
+
+// Aparece no histórico de consultas do servidor (match_log): use um nome por placa.
 #define DEVICE_ID        "esp32-01"
 
 #define AUDIO_SAMPLE_RATE  8000
 #define FFT_SIZE           1024
-#define BATCH_WINDOW_MS    3000
+// Duração da captura do microfone. 5 s acertou 97% no teste do catálogo; 3 s, 90%.
+#define BATCH_WINDOW_MS    5000
+
+// Origem do áudio: 0 = microfone INMP441; 1 = trecho de música gravado na flash (main/clipe,
+// gerado por scripts/gerar-clipe-teste.ps1) — testa Olaf + rede sem microfone.
+#define FONTE_AUDIO_CLIPE  0
+
+// Ganho do microfone. O serial mostra pico/RMS em dBFS e % de amostras saturadas a cada
+// captura: se saturar (> 1%), diminua; se o pico ficar abaixo de -30 dBFS, aumente.
+#define GANHO_MIC          40.0f

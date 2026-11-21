@@ -147,3 +147,67 @@ hardware (ESP32 + INMP441).
 - **61 testes aprovados, 0 falhas, 0 ignorados**: inclui equivalência C/.NET no mesmo PCM, sessões nativas independentes, silêncio/entrada inválida, idempotência, falha parcial e reparo, rejeição de legado sem perfil e ocultação de ingestões incompletas. Após os últimos guards de timestamp/cancelamento e ativação de foreign keys no escritor, os quatro testes de ingestão passaram novamente. Corrigida disputa preexistente entre duas classes que esvaziavam o DB 15 em paralelo, agrupando-as na mesma coleção xUnit.
 - Docker Desktop inicialmente falhou em sockets AF_UNIX antigos (`dockerInference`, depois `engine.sock`). Recuperado encerrando os processos Docker e renomeando somente as pastas de runtime observadas para backups `.stale-*` em LocalAppData. Containers, volumes e configurações não foram apagados. Engine e Valkey voltaram a responder; backups preservados.
 - README, arquitetura, guia `docs/ingestion.md`, instruções nativas e wrapper PowerShell atualizados. Fase 3 completa ainda requer pastas, paralelismo, `resume` automático, `remove`, `stats`, `verify` e validação de um catálogo maior.
+
+---
+
+## 2026-11-20 — Plano de finalização e pipeline completo sem microfone
+
+Levantamento do estado e plano em `docs/plano-finalizacao.md`. Trabalho na branch
+`feat/pipeline-esp-sem-mic` (criada a partir de `feat/sinal-de-vida-mic-oled`).
+
+### Firmware (placa sem microfone e sem OLED)
+
+- **Corrigido:** o sinal de vida chamava `abort()` quando o OLED não respondia (loop de reboot).
+  Agora sonda o endereço 0x3C, varre o barramento I²C para diagnóstico e segue sem display.
+- Olaf como componente ESP-IDF (`firmware/components/olaf`) compilando **os mesmos fontes** da DLL
+  (`native/olaf` no commit fixado + `native/olaf_wrapper.c`), com `-ffp-contract=off`.
+- `FONTE_AUDIO_CLIPE`: trecho de 5 s na flash, gerado pelo PC (`scripts/gerar-clipe-teste.ps1`)
+  como literais hexadecimais de float (o ESP-IDF 5.4 não alinha arquivos embutidos).
+- `network` (HTTPS com bundle de certificados), `resposta` (cJSON), máquina de estados com botão BOOT.
+- `board_build.partitions = partitions_singleapp_large.csv`: o binário tem 1,18 MB e o PlatformIO
+  reprovava contra o limite padrão de 1 MB.
+- **Resultados:** fingerprints do ESP 100% iguais aos do PC (74/74 e 119/119); Olaf ~720 ms por
+  5 s de áudio; reconhecimento de ponta a ponta (hotspot Galaxy → túnel Cloudflare → API) em
+  ~3,6 s; heap mínimo ~70 KB (durante o Olaf), volta a ~214 KB após cada ciclo.
+
+### Catálogo e backend
+
+- Catálogo real: `raw_30s_audio-low-00.tar` do MTG-Jamendo (586 faixas completas, CC, uso
+  acadêmico), baixado com verificação SHA-256 para `C:\shazamzinho-dados\jamendo` (fora do repo).
+  Ingerido no par `backend/data/catalogo.db` + Valkey database 1: 586 músicas, 251 mil chaves,
+  35 MB de RAM, ~20 min. Três falhas momentâneas de conexão com o Valkey (máquina ocupada pela
+  build) resolvidas repetindo; o script agora tenta de novo sozinho.
+- **Corrigido:** `MatchScorer` procura o pico numa janela de dois buckets vizinhos. Capturas
+  desalinhadas do passo do Olaf (16 ms) espalhavam os votos entre dois buckets na borda, e nenhum
+  atingia o limiar mesmo com todos os hashes encontrados. +2 testes.
+- **Corrigido:** a CLI lia `--offset-seconds 10.6` como 106 em Windows pt-BR (ponto = milhar).
+  Agora aceita `10.6` e `10,6` em qualquer cultura.
+- Taxa de acerto (`scripts/testar-reconhecimento.ps1`, 60 músicas sorteadas, offsets aleatórios):
+  trechos de 3 s → 90%, de 5 s → 97%, nenhuma música errada. Uma primeira medição de 23% estava
+  errada por causa do bug da CLI e de um resumo que contava falhas de extração como "não reconhecida".
+- `scripts/subir-servidor.ps1`: Valkey + API em Production (sem `/docs`) com chave aleatória em
+  `api-key.secret` + túnel rápido; imprime as linhas para o `config.h`.
+- Testes: **67 aprovados, 0 ignorados** (com o Valkey descartável na porta 6381).
+
+### Pendências observadas
+
+- O túnel rápido muda de URL a cada reinício do servidor, o que obriga a regravar o ESP (decisão D4).
+- O HTTPS domina o tempo de resposta (~2,7 s em dados móveis). Reaproveitar a conexão ou usar LAN encurta isso.
+- Microfone e OLED físicos ainda não testados nesta placa.
+
+### 2026-11-20 (noite) — pronto para o teste integrado
+
+- Decisões: apresentação na segunda (23/11), captura de 5 s, túnel rápido por enquanto.
+- **Ponte nativa:** API de fluxo `shazamzin_olaf_stream_new/feed/finish`, mesma sequência de
+  chamadas de `shazamzin_olaf_extract`. `OlafStreamTests`: resultado idêntico alimentando amostra a
+  amostra, em blocos de 128/256/1000 e em tamanhos irregulares; curto/silêncio/NaN como no bloco.
+- **Firmware:** microfone processado em fluxo (sem buffer de 5 s); `GANHO_MIC` (padrão 40x, como o
+  exemplo ESP32 do Olaf) com saturação; log de pico/RMS/saturação por captura com dicas de ajuste.
+  O antigo `>>14` para int16 dava a volta em sons altos; agora satura.
+- Placa: modo clipe pelo fluxo → 119/119 iguais e reconhecida; modo microfone sem microfone →
+  5,0 s capturados, silêncio, "não reconhecida", heap mínimo 55 KB, sem travar.
+- **Backend:** `/match` grava o `match_log` (falha ao gravar não derruba a resposta). 70/70 testes.
+- Docker caiu durante o trabalho; ao reiniciar, o catálogo estava intacto no database 1.
+- `subir-servidor.ps1` não achava a API: o PowerShell 5.1 resolvia `localhost` para IPv6 e a API
+  escuta em IPv4. Trocado por `127.0.0.1` (também no túnel); 503 agora é mostrado como "degradada".
+- Guia `docs/teste-integrado.md` e playlist `scripts/gerar-playlist.ps1`.

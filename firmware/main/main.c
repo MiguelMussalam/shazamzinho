@@ -1,13 +1,14 @@
 // Shazamzin firmware — app_main
 //
 // Fase 0: conecta no Wi-Fi (station) e imprime o IP no serial via ESP_LOGI.
-// As tasks de captura / fingerprint / rede e a máquina de estados entram nas
-// Fases 4-5 (ver docs/architecture.md seção 8). Os módulos já têm stubs em
-// audio_capture.*, fingerprint.*, network.*, protocol.*, state_machine.*.
+// Fase 4 (sinal de vida): captura_de_audio + display + maquina_de_estado lêem o
+// microfone e mostram status/IP/barra de VU no OLED. O fingerprint (Olaf) e a
+// rede entram nas fases seguintes — ver os módulos fingerprint.* e network.*.
 //
 // Antes de compilar: copie config.h.example -> config.h e preencha as credenciais.
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,8 +21,12 @@
 #include "nvs_flash.h"
 
 #include "config.h"
+#include "display.h"
+#include "maquina_de_estado.h"
 
 static const char *TAG = "shazamzin";
+
+static char s_ip_str[16] = "0.0.0.0";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
@@ -46,6 +51,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
         ESP_LOGI(TAG, "IP obtido: " IPSTR, IP2STR(&event->ip_info.ip));
+        snprintf(s_ip_str, sizeof(s_ip_str), IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_count = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -103,17 +109,26 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_LOGI(TAG, "=== Shazamzin firmware — Fase 0 ===");
+    ESP_LOGI(TAG, "=== Shazamzin firmware ===");
     ESP_LOGI(TAG, "Device ID: %s | heap livre: %lu bytes",
              DEVICE_ID, (unsigned long) esp_get_free_heap_size());
 
-    if (!wifi_init_sta()) {
-        ESP_LOGE(TAG, "Fase 0 FALHOU: sem Wi-Fi.");
-        return;
+    // Acende o OLED já de cara pra mostrar que a placa bootou, antes de bloquear
+    // no Wi-Fi. A task de sinal de vida reaproveita esse mesmo display (init idempotente).
+    display_init();
+    display_clear();
+    display_text(0, 0, "Shazamzin");
+    display_text(0, 2, "Conectando");
+    display_text(0, 3, "Wi-Fi...");
+    display_flush();
+
+    bool wifi_ok = wifi_init_sta();
+    if (!wifi_ok) {
+        // Sem Wi-Fi ainda dá pra gerar os fingerprints e comparar com o PC pelo serial.
+        ESP_LOGW(TAG, "Sem Wi-Fi — o ciclo para antes da consulta ao servidor.");
+        snprintf(s_ip_str, sizeof(s_ip_str), "sem Wi-Fi");
     }
 
-    // Fases 4-5: inicializar I2S, criar as tasks e a máquina de estados.
-    // state_machine_start();  // <- TODO Fase 5
-
-    ESP_LOGI(TAG, "Fase 0 OK. Aguardando implementacao das fases seguintes.");
+    // Captura (ou clipe de teste) -> Olaf -> POST /match -> resultado no serial/OLED.
+    maquina_estado_iniciar(s_ip_str, wifi_ok);
 }

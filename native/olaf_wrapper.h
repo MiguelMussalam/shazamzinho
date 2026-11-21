@@ -18,4 +18,15 @@ SZ_API int shazamzin_olaf_sample_rate(void);
 /* PCM normalizado, mono float32 a 8 kHz. 0=OK, 1=entrada inválida, 2=OOM, 3=cancelado. */
 SZ_API int shazamzin_olaf_extract(const float *samples, size_t count,
     sz_fingerprint_callback callback, void *user);
+
+/* Extração em fluxo: mesmos blocos, mesma ordem e mesmo resultado de shazamzin_olaf_extract
+ * sobre a concatenação de tudo que for alimentado, sem precisar do áudio inteiro na memória
+ * (o ESP32 não tem RAM para 5 s de captura em float). Uso: new -> feed (quantas vezes quiser,
+ * com qualquer tamanho) -> finish. finish emite os últimos fingerprints e libera a sessão.
+ * Diferença: uma amostra inválida só é detectada quando chega (fingerprints anteriores já
+ * foram emitidos). Retornos como em extract: 0=OK, 1=entrada inválida, 2=OOM, 3=cancelado. */
+typedef struct sz_stream sz_stream;
+SZ_API sz_stream *shazamzin_olaf_stream_new(sz_fingerprint_callback callback, void *user);
+SZ_API int shazamzin_olaf_stream_feed(sz_stream *stream, const float *samples, size_t count);
+SZ_API int shazamzin_olaf_stream_finish(sz_stream *stream);
 #endif
