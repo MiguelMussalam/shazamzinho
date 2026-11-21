@@ -22,6 +22,10 @@
 #ifndef FONTE_AUDIO_CLIPE
 #define FONTE_AUDIO_CLIPE 0
 #endif
+// Ganho aplicado ao microfone (config.h). O exemplo ESP32 do Olaf usa 40x.
+#ifndef GANHO_MIC
+#define GANHO_MIC 40.0f
+#endif
 
 #define BOTAO_BOOT_GPIO     GPIO_NUM_0
 #define FP_MAX              1024                       // limite de fingerprints por consulta
@@ -163,25 +167,45 @@ static void ciclo_reconhecimento(void)
     size_t descartados = 0;
     qtd = fingerprint_extrair_float(clipe_teste, clipe_teste_amostras, fps, FP_MAX, &descartados);
 #else
+    // Captura e fingerprint ao mesmo tempo: cada bloco de 256 amostras (32 ms) vai direto para
+    // o Olaf. Nada de buffer de 5 s (seriam 160 KB em float, mais que o maior bloco livre).
     mudar_estado(ESTADO_CAPTURANDO);
-    tela("Ouvindo...", NULL, NULL, NULL);
-    const size_t total = (size_t) AUDIO_SAMPLE_RATE * CAPTURA_MS / 1000;
-    int16_t *amostras = malloc(total * sizeof(int16_t));
-    if (!amostras) {
-        ESP_LOGE(TAG, "sem memoria para %u amostras", (unsigned) total);
+    char linha_ouvindo[24];
+    snprintf(linha_ouvindo, sizeof(linha_ouvindo), "Ouvindo %d s...", CAPTURA_MS / 1000);
+    tela(linha_ouvindo, NULL, NULL, NULL);
+    const int64_t t_fp = esp_timer_get_time();
+    fp_sessao_t *sessao = fingerprint_sessao_nova(fps, FP_MAX);
+    if (!sessao) {
+        tela("Erro:", "sem memoria", NULL, NULL);
         goto fim;
     }
+    const size_t total = (size_t) AUDIO_SAMPLE_RATE * CAPTURA_MS / 1000;
+    captura_estat_t est = {0};
+    float bloco[256];
     size_t lidas = 0;
     while (lidas < total) {
-        size_t n = captura_audio_ler(amostras + lidas, total - lidas);
-        if (n == 0) break;
+        size_t n = captura_audio_ler_float(bloco, total - lidas < 256 ? total - lidas : 256, GANHO_MIC, &est);
+        if (n == 0) {
+            ESP_LOGE(TAG, "microfone nao entregou amostras (I2S): confira a ligacao");
+            break;
+        }
         lidas += n;
+        if (!fingerprint_sessao_alimentar(sessao, bloco, n)) break;
     }
     mudar_estado(ESTADO_PROCESSANDO);
     tela("Processando", NULL, NULL, NULL);
-    const int64_t t_fp = esp_timer_get_time();
-    qtd = fingerprint_process(amostras, lidas, fps, FP_MAX);
-    free(amostras);
+    size_t descartados = 0;
+    qtd = fingerprint_sessao_finalizar(sessao, &descartados);
+
+    float pico_db, rms_db, pct_sat;
+    captura_estat_resumo(&est, &pico_db, &rms_db, &pct_sat);
+    ESP_LOGI(TAG, "captura: %.1f s, ganho %.0fx, pico %.1f dBFS, rms %.1f dBFS, saturadas %.2f%%",
+             lidas / (double) AUDIO_SAMPLE_RATE, (double) GANHO_MIC, pico_db, rms_db, pct_sat);
+    if (pct_sat > 1.0f) {
+        ESP_LOGW(TAG, "muitas amostras saturadas: diminua GANHO_MIC no config.h ou afaste a caixa de som");
+    } else if (pico_db < -30.0f) {
+        ESP_LOGW(TAG, "audio muito baixo: aumente GANHO_MIC no config.h ou aproxime a caixa de som");
+    }
 #endif
     const int64_t ms_fp = (esp_timer_get_time() - t_fp) / 1000;
     ESP_LOGI(TAG, "Olaf: %u fingerprints em %lld ms", (unsigned) qtd, ms_fp);

@@ -1,4 +1,6 @@
 #include "captura_de_audio.h"
+#include <math.h>
+#include <stdbool.h>
 #include "driver/i2s_std.h"
 #include "esp_log.h"
 
@@ -10,10 +12,6 @@
 #define I2S_WS_GPIO     15   // WS  (pino de strapping — conferir boot com o mic ligado)
 #define I2S_DIN_GPIO    32   // SD
 #define TAXA_AMOSTRAGEM 8000
-
-// O INMP441 entrega 24 bits dentro de um slot de 32. Deslocamos para int16.
-// >>14 dá uma sensibilidade razoável para o VU; ajuste na bancada se precisar.
-#define DESLOCAMENTO_AMOSTRA 14
 
 static const char *TAG = "audio";
 static i2s_chan_handle_t s_canal_rx = NULL;
@@ -55,25 +53,61 @@ void captura_audio_iniciar(void)
     ESP_LOGI(TAG, "I2S INMP441 pronto (%d Hz, mono, canal esq.)", TAXA_AMOSTRAGEM);
 }
 
-size_t captura_audio_ler(int16_t *saida, size_t max_amostras)
+// Lê até 256 amostras brutas (slots de 32 bits). Retorna quantas leu.
+static size_t ler_bruto(int32_t *bruto, size_t max)
 {
-    if (!s_canal_rx || !saida || max_amostras == 0) return 0;
-
-    // Lê em blocos de até 256 amostras de 32 bits para um buffer temporário.
-    int32_t bruto[256];
-    size_t desejado = max_amostras < 256 ? max_amostras : 256;
+    if (!s_canal_rx || max == 0) return 0;
+    size_t desejado = max < 256 ? max : 256;
     size_t bytes_lidos = 0;
-
     esp_err_t err = i2s_channel_read(s_canal_rx, bruto, desejado * sizeof(int32_t),
-                                     &bytes_lidos, 100 /* ms */);
+                                     &bytes_lidos, 200 /* ms */);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "i2s_channel_read: %s", esp_err_to_name(err));
         return 0;
     }
+    return bytes_lidos / sizeof(int32_t);
+}
 
-    size_t qtd = bytes_lidos / sizeof(int32_t);
+size_t captura_audio_ler_float(float *saida, size_t max, float ganho, captura_estat_t *est)
+{
+    if (!saida) return 0;
+    int32_t bruto[256];
+    size_t qtd = ler_bruto(bruto, max);
     for (size_t i = 0; i < qtd; i++) {
-        saida[i] = (int16_t) (bruto[i] >> DESLOCAMENTO_AMOSTRA);
+        // 24 bits úteis no topo do slot de 32: >>8 e divide por 2^23 => -1..1.
+        float x = (float) (bruto[i] >> 8) / 8388608.0f * ganho;
+        bool saturou = false;
+        if (x > 1.0f) { x = 1.0f; saturou = true; }
+        else if (x < -1.0f) { x = -1.0f; saturou = true; }
+        saida[i] = x;
+        if (est) {
+            float a = x < 0 ? -x : x;
+            if (a > est->pico) est->pico = a;
+            est->soma_quad += (double) x * x;
+            if (saturou) est->saturadas++;
+        }
+    }
+    if (est) est->amostras += qtd;
+    return qtd;
+}
+
+size_t captura_audio_ler(int16_t *saida, size_t max_amostras)
+{
+    if (!saida) return 0;
+    int32_t bruto[256];
+    size_t qtd = ler_bruto(bruto, max_amostras);
+    for (size_t i = 0; i < qtd; i++) {
+        // Equivale ao antigo >>14 (ganho 4x sobre 16 bits), agora saturando em vez de dar a volta.
+        int32_t v = bruto[i] >> 14;
+        saida[i] = (int16_t) (v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
     }
     return qtd;
+}
+
+void captura_estat_resumo(const captura_estat_t *est, float *pico_dbfs, float *rms_dbfs, float *pct_saturado)
+{
+    double rms = est->amostras ? sqrt(est->soma_quad / est->amostras) : 0.0;
+    *pico_dbfs = est->pico > 0 ? 20.0f * log10f(est->pico) : -120.0f;
+    *rms_dbfs = rms > 0 ? (float) (20.0 * log10(rms)) : -120.0f;
+    *pct_saturado = est->amostras ? 100.0f * est->saturadas / est->amostras : 0.0f;
 }

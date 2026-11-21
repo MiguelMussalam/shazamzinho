@@ -48,7 +48,16 @@ celular, consultando a API pelo túnel do Cloudflare:
   (Olaf 0,7 s + HTTPS ~2,7 s + servidor < 10 ms);
 - heap volta a ~214 KB livres após cada ciclo; pior momento ~70 KB livres (durante o Olaf).
 
-Falta validar com o microfone (`FONTE_AUDIO_CLIPE = 0`) e o OLED físicos.
+**Captura em fluxo:** com o microfone, cada bloco de 256 amostras vai direto para o Olaf
+enquanto grava (5 s em float seriam 160 KB, mais que o maior bloco livre). A API de fluxo da
+ponte nativa dá resultado idêntico à extração do PC (`OlafStreamTests`), e o modo clipe também
+passa por ela: 119/119 iguais na placa. O modo microfone foi rodado **sem o microfone ligado**:
+captura de 5,0 s, silêncio detectado, consulta "não reconhecida", heap mínimo 55 KB, sem travar.
+
+Ganho do microfone em `GANHO_MIC` (padrão 40x, como o exemplo ESP32 do Olaf), com saturação.
+Cada captura loga pico/RMS em dBFS e % saturado para ajustar o ganho.
+
+Falta validar com o microfone e o OLED físicos: roteiro em `../docs/teste-integrado.md`.
 
 O OLED usa o driver SSD1306 que já vem no componente `esp_lcd` do ESP-IDF 5.4
 (sem dependências externas); o `audio_capture` usa a API `i2s_std`.
