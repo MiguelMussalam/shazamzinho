@@ -3,13 +3,18 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "config.h"
+#include "config.h"     // API_KEY (privada, fora do git)
+#include "servidor.h"   // SERVIDOR_URL (versionado)
+
+#ifndef API_KEY
+#error "Defina API_KEY no firmware/main/config.h com a chave de quem roda o servidor (arquivo api-key.secret dele)."
+#endif
 
 static const char *TAG = "net";
 
 void network_init(void)
 {
-    ESP_LOGI(TAG, "servidor: %s", SERVER_URL);
+    ESP_LOGI(TAG, "servidor: %s", SERVIDOR_URL);
 }
 
 int network_post_match(const uint8_t *payload, size_t len, char *resp_json, size_t resp_cap)
@@ -17,7 +22,7 @@ int network_post_match(const uint8_t *payload, size_t len, char *resp_json, size
     if (resp_json && resp_cap) resp_json[0] = '\0';
 
     esp_http_client_config_t cfg = {
-        .url = SERVER_URL,
+        .url = SERVIDOR_URL,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 15000,
         // HTTPS (túnel do Cloudflare): valida o certificado com o bundle de CAs do ESP-IDF.

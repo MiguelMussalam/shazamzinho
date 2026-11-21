@@ -12,41 +12,49 @@ provar aqui é o hardware: o microfone captando bem e o OLED mostrando o resulta
 
 ## 2. Servidor (no notebook)
 
+Só quem roda o servidor (o notebook com o catálogo):
+
 ```powershell
 # Docker Desktop aberto antes
-./scripts/subir-servidor.ps1
+./scripts/subir-servidor.ps1 -Publicar
+git add firmware/main/servidor.h; git commit -m "chore: endereço do servidor"; git push
 ```
 
-Ele sobe o Valkey, a API (com o catálogo de 586 músicas) e o túnel, e imprime:
+Ele sobe o Valkey, a API (com o catálogo de 586 músicas) e o túnel, e grava a **URL** em
+`firmware/main/servidor.h`, que é versionado. A **chave** fica em `api-key.secret` (fora do git):
+mande-a em particular para quem vai gravar o ESP. Ela não muda entre reinícios.
+**Deixe essa janela aberta.** Se o servidor reiniciar, o túnel ganha outra URL: publique de
+novo, e quem grava o ESP faz `git pull` e regrava.
 
+## 3. Firmware (pode ser em outra máquina)
+
+```powershell
+git pull                                                   # pega o servidor.h atual
+cp firmware/main/config.h.example firmware/main/config.h   # se ainda não existir
 ```
-Para firmware/main/config.h:
-  #define SERVER_URL       "https://<aleatorio>.trycloudflare.com/match"
-  #define API_KEY          "<chave>"
-```
 
-**Deixe essa janela aberta.** Se o servidor reiniciar, o túnel ganha outra URL e o ESP
-precisa ser gravado de novo.
-
-## 3. Firmware
-
-Em `firmware/main/config.h` (copie de `config.h.example` se não existir):
+Em `firmware/main/config.h`:
 
 | Item | Valor |
 |---|---|
-| `WIFI_SSID` / `WIFI_PASSWORD` | hotspot do celular, em **2,4 GHz** |
-| `SERVER_URL` / `API_KEY` | as duas linhas impressas pelo `subir-servidor.ps1` |
+| `WIFI_SSID` / `WIFI_PASSWORD` | Wi-Fi do local, em **2,4 GHz** |
+| `API_KEY` | a chave recebida em particular de quem roda o servidor |
+| `DEVICE_ID` | um nome para a placa (aparece no histórico do servidor) |
 | `FONTE_AUDIO_CLIPE` | `0` (microfone) |
 | `BATCH_WINDOW_MS` | `5000` |
 | `GANHO_MIC` | `40.0f` para começar |
+
+O endereço do servidor **não** vai no `config.h`: vem do `servidor.h`. Se o seu `config.h`
+é antigo, recrie a partir do `config.h.example` (ele não tinha ganho nem 5 s); sem `API_KEY`
+o firmware nem compila, com uma mensagem dizendo onde colocar.
 
 ```powershell
 cd firmware
 pio run -t upload -t monitor      # ou C:\Users\<voce>\.platformio\penv\Scripts\platformio.exe
 ```
 
-Se o `pio` não estiver no PATH, use o caminho completo acima. Antes da primeira build numa
-máquina nova: `./native/build.ps1` (o firmware compila os fontes do Olaf clonados por ele).
+Se o `pio` não estiver no PATH, use o caminho completo acima. Na primeira build o firmware
+baixa sozinho o Olaf no commit fixado (só precisa de git e internet).
 
 ## 4. O que conferir no serial e no OLED
 
@@ -81,8 +89,9 @@ captura: 5.0 s, ganho 40x, pico -9.5 dBFS, rms -24.0 dBFS, saturadas 0.00%
 | pico em `-120 dBFS` sempre, VU parado | microfone sem sinal | confira `SD=GPIO32`, `SCK=GPIO14`, `WS=GPIO15`, `L/R` no GND, 3,3 V |
 | `Olaf: 0 fingerprints` com nível bom | áudio sem conteúdo musical (só ruído) | toque música, não fala |
 | `match=0` com centenas de hashes recebidos e poucos acertados | ruído alto ou música fora do catálogo | use a playlist; reduza o ruído ambiente; teste outra faixa |
-| `HTTP -1` / `sem conexao` | sem internet no hotspot ou URL antiga | confira o hotspot; se o servidor reiniciou, atualize `SERVER_URL` e regrave |
-| `HTTP 401` | `API_KEY` diferente da do servidor | copie de novo a linha impressa pelo `subir-servidor.ps1` |
+| `HTTP -1` / `sem conexao` | sem internet no Wi-Fi ou URL antiga | confira o Wi-Fi; se o servidor reiniciou, `git pull` (servidor.h novo) e regrave |
+| `HTTP 401` | `API_KEY` do `config.h` diferente da do servidor | peça a chave de novo (`api-key.secret`) e regrave |
+| `HTTP 502`/`530` ou timeout | servidor desligado no notebook | avise quem roda o servidor |
 | ESP não termina o boot com o microfone ligado | `WS` no GPIO15 (pino de strapping) | desconecte o fio do WS, grave/ligue, reconecte |
 
 ## 7. Plano B
@@ -92,7 +101,7 @@ captura: 5.0 s, ganho 40x, pico -9.5 dBFS, rms -24.0 dBFS, saturadas 0.00%
   Mostra o sistema inteiro menos a captura.
 - **Sem internet na sala:** ligue o notebook no mesmo hotspot e use
   `./scripts/subir-servidor.ps1 -Tunnel:$false`. Ele mostra `http://<ip>:5184/match` para o
-  `SERVER_URL`. O firewall do Windows pode bloquear a porta 5184 (libere ou volte ao túnel).
+  `SERVIDOR_URL` do `servidor.h`. O firewall do Windows pode bloquear a porta 5184 (libere ou volte ao túnel).
 - Testar o servidor sozinho, sem o ESP: `./scripts/testar-reconhecimento.ps1 -Count 10 -DurationSeconds 5`.
 
 ## 8. No dia da apresentação

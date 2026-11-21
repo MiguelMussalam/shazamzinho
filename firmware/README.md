@@ -10,8 +10,9 @@ e `../docs/esp-idf-notes.md`.
 cp main/config.h.example main/config.h   # preencha SSID/senha/URL/API key
 ```
 
-`config.h` é gitignored. `SERVER_URL` e `API_KEY` saem prontos da saída de
-`../scripts/subir-servidor.ps1`. O Wi-Fi precisa ser de 2,4 GHz.
+`config.h` é gitignored: Wi-Fi (2,4 GHz), `API_KEY` (recebida em particular de quem roda o
+servidor) e ajustes de áudio. O endereço do servidor fica em `main/servidor.h`, versionado e
+atualizado por `../scripts/subir-servidor.ps1 -Publicar`. A primeira build baixa o Olaf sozinha se faltar.
 
 ## Build / flash / monitor
 

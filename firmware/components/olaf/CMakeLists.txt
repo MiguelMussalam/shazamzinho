@@ -9,11 +9,24 @@ set(SZ_NATIVE "${CMAKE_CURRENT_LIST_DIR}/../../../native")
 get_filename_component(SZ_NATIVE "${SZ_NATIVE}" ABSOLUTE)
 set(SZ_OLAF "${SZ_NATIVE}/olaf")
 
-if(NOT EXISTS "${SZ_OLAF}/src/olaf_fft.c")
-    message(FATAL_ERROR "Olaf ausente em ${SZ_OLAF}. Rode native/build.ps1 (clona o commit fixado) antes de compilar o firmware.")
-endif()
-
 file(STRINGS "${SZ_NATIVE}/olaf.version" SZ_OLAF_REVISION LIMIT_COUNT 1)
+
+# Sem o Olaf clonado (máquina que só compila o firmware), baixa o commit fixado: ~6 MB,
+# só git. Equivale ao clone do native/build.ps1, sem precisar de CMake/GCC para a DLL.
+if(NOT EXISTS "${SZ_OLAF}/src/olaf_fft.c")
+    message(STATUS "Olaf ausente: baixando ${SZ_OLAF_REVISION} em ${SZ_OLAF}")
+    file(MAKE_DIRECTORY "${SZ_OLAF}")
+    foreach(sz_cmd
+            "init;-q"
+            "remote;add;origin;https://github.com/JorenSix/Olaf.git"
+            "fetch;-q;--depth;1;origin;${SZ_OLAF_REVISION}"
+            "checkout;-q;--detach;FETCH_HEAD")
+        execute_process(COMMAND git -C "${SZ_OLAF}" ${sz_cmd} RESULT_VARIABLE sz_rc)
+        if(NOT sz_rc EQUAL 0)
+            message(FATAL_ERROR "Falha ao baixar o Olaf (git ${sz_cmd}). Confira a internet e o git, ou rode native/build.ps1.")
+        endif()
+    endforeach()
+endif()
 execute_process(COMMAND git -C "${SZ_OLAF}" rev-parse HEAD
     OUTPUT_VARIABLE SZ_OLAF_ACTUAL OUTPUT_STRIP_TRAILING_WHITESPACE)
 if(NOT SZ_OLAF_ACTUAL STREQUAL SZ_OLAF_REVISION)

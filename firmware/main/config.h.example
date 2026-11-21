@@ -5,8 +5,12 @@
 
 #define WIFI_SSID        "sua-rede"
 #define WIFI_PASSWORD    "sua-senha"
-#define SERVER_URL       "https://xxx.trycloudflare.com/match"
-#define API_KEY          "dev-key-local"
+// Chave da API: peça a quem roda o servidor (arquivo api-key.secret dele). Fica só aqui,
+// fora do git. O ENDEREÇO do servidor não fica aqui: vem de main/servidor.h (versionado,
+// atualizado por scripts/subir-servidor.ps1 -Publicar) — basta `git pull` para pegar o atual.
+#define API_KEY          "peca-a-chave-a-quem-roda-o-servidor"
+
+// Aparece no histórico de consultas do servidor (match_log): use um nome por placa.
 #define DEVICE_ID        "esp32-01"
 
 #define AUDIO_SAMPLE_RATE  8000

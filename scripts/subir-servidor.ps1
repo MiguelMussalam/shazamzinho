@@ -7,7 +7,7 @@
   - Sobe a API em modo Production (sem /docs) com uma chave de API aleatória guardada em
     api-key.secret na raiz do repo (ignorado pelo git; criado na primeira execução).
   - Com -Tunnel (padrão), abre um túnel rápido do Cloudflare e imprime a URL pública e a linha
-    pronta para firmware/main/config.h. O túnel rápido muda de URL a cada execução.
+    pronta para firmware/main/servidor.h. O túnel rápido muda de URL a cada execução.
   - Ctrl+C encerra a API e o túnel.
 
 .PARAMETER Sqlite / Valkey
@@ -16,12 +16,14 @@
 .EXAMPLE
   ./scripts/subir-servidor.ps1
   ./scripts/subir-servidor.ps1 -Tunnel:$false     # só LAN: http://<ip-do-notebook>:5184/match
+  ./scripts/subir-servidor.ps1 -Publicar          # e grava o endereço em firmware/main/servidor.h
 #>
 [CmdletBinding()]
 param(
     [string]$Sqlite = 'Data Source=./data/catalogo.db',
     [string]$Valkey = 'localhost:6379,defaultDatabase=1',
     [switch]$Tunnel = $true,
+    [switch]$Publicar,   # grava a URL em firmware/main/servidor.h (versionado; a chave não)
     [int]$Port = 5184
 )
 
@@ -96,10 +98,17 @@ try {
         if (-not $url) { throw "O túnel não informou a URL em 60 s. Veja $cfLog" }
         Write-Host "Túnel: $url"
         Write-Host ""
-        Write-Host "Para firmware/main/config.h:"
-        Write-Host "  #define SERVER_URL       `"$url/match`""
-        Write-Host "  #define API_KEY          `"$chave`""
-    }
+        Write-Host "Para o firmware (URL em main/servidor.h com -Publicar; a chave vai no config.h, em particular):"
+        Write-Host "  #define SERVIDOR_URL      `"$url/match`""
+        Write-Host "  #define API_KEY           `"$chave`"   (config.h — não publique)"
+        if ($Publicar) {
+            $hdr = Join-Path $root 'firmware/main/servidor.h'
+            $h = [IO.File]::ReadAllText($hdr, [Text.Encoding]::UTF8)
+            $h = $h -replace '#define SERVIDOR_URL\s+".*"', ('#define SERVIDOR_URL      "' + $url + '/match"')
+            [IO.File]::WriteAllText($hdr, $h, (New-Object System.Text.UTF8Encoding $false))
+            Write-Host ""
+            Write-Host "URL publicada em firmware/main/servidor.h: commit + push para quem grava o ESP pegar com git pull. A chave NÃO vai para o repositório."
+        }    }
     Write-Host ""
     Write-Host 'Servidor no ar. Ctrl+C para encerrar.'
     Wait-Process -Id $api.Id

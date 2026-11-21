@@ -120,7 +120,8 @@ chip), senão a porta COM não aparece.
 cd C:\dev        # uma pasta sem espaços no caminho
 git clone https://github.com/MiguelMussalam/shazamzinho.git
 cd shazamzinho
-./native/build.ps1   # clona o Olaf no commit fixado: o firmware compila esses mesmos fontes
+# Só quem roda o servidor precisa de ./native/build.ps1 (CMake + GCC). Para o firmware,
+# a primeira build baixa sozinha o Olaf no commit fixado (só git e internet).
 ```
 
 ### 3. Credenciais (config.h)
@@ -129,8 +130,10 @@ cd shazamzinho
 cp firmware/main/config.h.example firmware/main/config.h
 ```
 
-Preencha `WIFI_SSID` / `WIFI_PASSWORD` (rede de **2,4 GHz**) e as linhas `SERVER_URL` /
-`API_KEY` impressas pelo `./scripts/subir-servidor.ps1`. `FONTE_AUDIO_CLIPE 0` usa o
+Preencha `WIFI_SSID` / `WIFI_PASSWORD` (rede de **2,4 GHz**) e `API_KEY` (peça a quem roda o
+servidor; ela não vai para o repositório). O endereço do servidor vem de
+`firmware/main/servidor.h`, versionado e atualizado por quem roda o servidor
+(`./scripts/subir-servidor.ps1 -Publicar`): basta `git pull`. `FONTE_AUDIO_CLIPE 0` usa o
 microfone; `1` usa um trecho de música gravado na flash (testa tudo sem microfone).
 Sem Wi-Fi válido o firmware ainda roda: gera os fingerprints e mostra "sem Wi-Fi".
 
