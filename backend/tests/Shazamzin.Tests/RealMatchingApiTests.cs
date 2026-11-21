@@ -63,6 +63,20 @@ public sealed class RealMatchingApiTests : IClassFixture<RealApiFactory>
         health.GetProperty("sqlite").GetString().Should().Be("up");
         health.GetProperty("indexed_songs").GetInt32().Should().Be(1);
 
+        // a consulta ficou registrada no histórico (match_log)
+        await using (var sqlite = new Microsoft.Data.Sqlite.SqliteConnection(_factory.SqliteConnectionString))
+        {
+            await sqlite.OpenAsync();
+            await using var command = sqlite.CreateCommand();
+            command.CommandText = "SELECT device_id, matched_song_id, hashes_received, confidence FROM match_log";
+            await using var reader = await command.ExecuteReaderAsync();
+            (await reader.ReadAsync()).Should().BeTrue("o /match grava cada consulta no match_log");
+            reader.GetString(0).Should().Be("esp32-e2e");
+            reader.GetInt32(1).Should().Be(1);
+            reader.GetInt32(2).Should().Be(80);
+            reader.GetDouble(3).Should().Be(1.0);
+        }
+
         await mux.GetServer(mux.GetEndPoints()[0]).FlushDatabaseAsync(15);
     }
 }

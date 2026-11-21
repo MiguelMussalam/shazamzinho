@@ -49,6 +49,7 @@ if (useFake)
 {
     builder.Services.AddSingleton<IMatchingService, FakeMatchingService>();
     builder.Services.AddSingleton<IHealthProbe, DisabledHealthProbe>();
+    builder.Services.AddSingleton<IMatchLog, NoMatchLog>();
 }
 else
 {
@@ -71,6 +72,7 @@ else
         services.GetRequiredService<IConnectionMultiplexer>()));
     builder.Services.AddSingleton<IMatchingService, ValkeyMatchingService>();
     builder.Services.AddSingleton<IHealthProbe, ValkeyHealthProbe>();
+    builder.Services.AddSingleton<IMatchLog>(_ => new SqliteMatchLog(sqliteConnectionString));
 }
 
 var app = builder.Build();
@@ -111,7 +113,7 @@ app.MapGet("/health", async (IHealthProbe probe, CancellationToken ct) =>
 .Produces<HealthReport>(StatusCodes.Status200OK)
 .Produces<HealthReport>(StatusCodes.Status503ServiceUnavailable);
 
-app.MapPost("/match", async (HttpContext context, IMatchingService matching, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPost("/match", async (HttpContext context, IMatchingService matching, IMatchLog matchLog, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (context.Request.ContentType is not { } contentType ||
         !contentType.StartsWith("application/octet-stream", StringComparison.OrdinalIgnoreCase))
@@ -145,6 +147,17 @@ app.MapPost("/match", async (HttpContext context, IMatchingService matching, ILo
     logger.LogInformation(
         "Match session={SessionId} hashes={Hashes} match={Match} song={SongId} {ElapsedMs}ms",
         payload!.SessionId, payload.Fingerprints.Count, result.Match, result.SongId, result.ProcessingTimeMs);
+
+    // Histórico (match_log). Uma falha aqui não pode custar a resposta ao dispositivo.
+    try
+    {
+        var device = context.Request.Headers["X-Device-ID"].ToString();
+        await matchLog.RecordAsync(string.IsNullOrWhiteSpace(device) ? "-" : device, payload.Fingerprints.Count, result, ct);
+    }
+    catch (Exception logError) when (logError is not OperationCanceledException)
+    {
+        logger.LogWarning(logError, "Falha ao gravar o match_log");
+    }
 
     return Results.Ok(result);
 })
