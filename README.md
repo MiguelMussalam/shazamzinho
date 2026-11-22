@@ -12,7 +12,7 @@ no Valkey + SQLite e devolve título e artista para o OLED.
 
 | Parte | Estado |
 |---|---|
-| **Backend** (API + ingestão) | Catálogo de 586 músicas (MTG-Jamendo). Trechos de 5 s: 97% de acerto, nenhuma música errada. |
+| **Backend** (API + ingestão) | Catálogo de 586 músicas (MTG-Jamendo). Trechos de 5 s com áudio limpo: 97–99% de acerto. Com eco e ruído **simulados** cai (44% no pior cenário testado) e pode, raramente, responder a música errada. Microfone real ainda não medido: ver [teste integrado](docs/teste-integrado.md). |
 | **Olaf no ESP32** | Fingerprints 100% iguais aos do PC no mesmo áudio, em ~0,7 s por 5 s de áudio. |
 | **ESP32 → backend** | Ciclo completo pelo hotspot + túnel Cloudflare: ~3,6 s até o resultado. |
 | **Microfone e OLED físicos** | Firmware pronto; falta o teste com o hardware montado. |
