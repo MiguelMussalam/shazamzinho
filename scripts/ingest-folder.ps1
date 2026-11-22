@@ -60,8 +60,36 @@ if ($arquivos.Count -eq 0) { throw "Nenhum arquivo de áudio em $Path." }
 
 $meta = @{}
 if ($JamendoMeta) {
-    Import-Csv -LiteralPath $JamendoMeta -Delimiter "`t" | ForEach-Object { $meta[$_.TRACK_ID] = $_ }
+    # O TSV não usa aspas para delimitar campos. Import-Csv as interpreta e perde linhas e aspas.
+    $colunas = $null
+    $malformadas = 0
+    foreach ($linha in [IO.File]::ReadLines((Convert-Path -LiteralPath $JamendoMeta))) {
+        $campos = $linha.Split("`t")
+        if ($null -eq $colunas) { $colunas = $campos; continue }
+        if ($campos.Count -ne $colunas.Count) { $malformadas++; continue }
+        $registro = @{}
+        for ($j = 0; $j -lt $campos.Count; $j++) { $registro[$colunas[$j]] = $campos[$j] }
+        $meta[$registro.TRACK_ID] = $registro
+    }
+    if ($malformadas) { Write-Warning "$malformadas linhas do TSV com número errado de campos foram ignoradas." }
     Write-Host "Metadados Jamendo: $($meta.Count) faixas."
+}
+
+# Não usa '& exe': o PowerShell 5.1 perde ou divide argumentos com aspas (títulos e álbuns têm).
+function Invoke-Programa([string]$Programa, [string[]]$Argumentos) {
+    $partes = foreach ($a in $Argumentos) { '"' + ($a -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+    $psi = New-Object System.Diagnostics.ProcessStartInfo $Programa, ($partes -join ' ')
+    $psi.WorkingDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $proc = [Diagnostics.Process]::Start($psi)
+    try {
+        $stderr = $proc.StandardError.ReadToEndAsync() # assíncrono para os dois pipes não travarem
+        $stdout = $proc.StandardOutput.ReadToEnd()
+        $proc.WaitForExit()
+        return [pscustomobject]@{ Codigo = $proc.ExitCode; Saida = $stdout; Erro = $stderr.Result }
+    } finally { $proc.Dispose() }
 }
 
 $resultados = New-Object System.Collections.Generic.List[object]
@@ -81,21 +109,17 @@ for ($i = 0; $i -lt $arquivos.Count; $i++) {
     }
 
     $t0 = Get-Date
-    # PowerShell 5.1: com 'Stop', cada linha de stderr do programa (o progresso da CLI) viraria erro fatal.
-    $ErrorActionPreference = 'Continue'
-    $saida = & $exe @cli 2>&1
-    $codigo = $LASTEXITCODE
+    $exec = Invoke-Programa $exe $cli
+    $codigo = $exec.Codigo
     if ($codigo -ne 0) {
         # Uma nova tentativa: as falhas vistas na prática foram conexões momentâneas com o Valkey
         # (máquina ocupada). Repetir é seguro: a ingestão é idempotente e repara escritas parciais.
         Start-Sleep -Seconds 2
-        $saida = & $exe @cli 2>&1
-        $codigo = $LASTEXITCODE
+        $exec = Invoke-Programa $exe $cli
+        $codigo = $exec.Codigo
     }
-    $ErrorActionPreference = 'Stop'
-    $json = ($saida | Where-Object { $_ -is [string] }) -join "`n"
-    $erro = ($saida | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } |
-        ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Erro|Error' }) -join ' '
+    $json = $exec.Saida
+    $erro = ($exec.Erro -split '\r?\n' | Where-Object { $_ -match 'Erro|Error' }) -join ' '
     $r = [pscustomobject]@{ Arquivo = $arq.FullName; Status = 'falha'; SongId = ''; Fingerprints = ''; Segundos = 0; Erro = $erro }
     if ($codigo -eq 0) {
         try {
