@@ -9,4 +9,4 @@
 // A CHAVE da API não fica aqui (o repositório é público): ela vai em API_KEY no config.h,
 // que é ignorado pelo git. Peça a chave a quem roda o servidor; ela não muda entre reinícios.
 
-#define SERVIDOR_URL      "https://server-robot-passenger-officials.trycloudflare.com/match"
+#define SERVIDOR_URL      "https://ghz-arkansas-louise-treat.trycloudflare.com/match"
