@@ -2,11 +2,11 @@
 
 ## Integrantes
 
-- Miguel Mussalam Silva (RA 1123299)
-- Thiago Danilow de Araujo (RA 9979454)
-- Pedro de França Pereira (RA 8165880)
-- João Pedro Thomaz Kairalla dos Santos (RA 6898366)
-- Joaquim Luiz Malacarne Lima de Oliveira (RA 4418635)
+- Miguel Mussalam Silva (Matrícula 1123299)
+- Thiago Danilow de Araujo (Matrícula 9979454)
+- Pedro de França Pereira (Matrícula 8165880)
+- João Pedro Thomaz Kairalla dos Santos (Matrícula 6898366)
+- Joaquim Luiz Malacarne Lima de Oliveira (Matrícula 4418635)
 
 ## Projeto
 
